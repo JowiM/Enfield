@@ -6,6 +6,11 @@
  */
 #include "groot.h"
 
-void sensor_bootstrap();
+void
+sensor_bootstrap(GROOT_TOC *support);
 
-int sensor_publish();
+int
+sensor_publish();
+
+int
+sensor_destroy();
