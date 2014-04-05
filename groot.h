@@ -12,11 +12,11 @@
  */
 
 #ifndef GROOT_VERSION
-	#define GROOT_VERSION 1;
+	#define GROOT_VERSION 1
 #endif
 
 #ifndef DEBUG_LEVEL
-	#define DEBUG_LEVEL 0;
+	#define DEBUG_LEVEL 0
 #endif
 
 /**
@@ -38,7 +38,7 @@
  * The Data Channel Packet Types
  */
 #ifndef GROOT_SUBSCRIBE_TYPE 
- 	#define GROOT_SUBSRIBE_TYPE 0x01
+ 	#define GROOT_SUBSCRIBE_TYPE 0x01
 #endif
 
 #ifndef GROOT_UNSUBSCRIBE_TYPE

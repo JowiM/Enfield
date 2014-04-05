@@ -10,10 +10,6 @@ static GROOT_SRT_RW *tree_row = NULL;
 static void
 recv_data(struct broadcast_conn *c, const rimeaddr_t *from){
 	printf("Recevied Query!!");
-
-	GROOT_HEADER *hdr;
-	hdr = (GROOT_HEADER*) packetbuf_dataptr();
-	printf("Protocol Version: %d \n", hdr->protocol.version);
 	
 	//Handle new query
 	GROOT_QUERY_RW *new_query;
