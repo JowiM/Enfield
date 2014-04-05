@@ -7,7 +7,7 @@
 #include "groot.h"
 
 void
-sensor_bootstrap(GROOT_TOC *support);
+sensor_bootstrap(GROOT_SENSORS *support);
 
 int
 sensor_publish();

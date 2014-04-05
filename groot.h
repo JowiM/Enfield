@@ -56,6 +56,10 @@
 /**
  * AGGREGATORS
  */
+#ifndef GROOT_NO_AGGREGATION
+ 	#define GROOT_NO_AGGREGATION 0x00
+#endif
+
 #ifndef GROOT_MAX
 	#define GROOT_MAX 0x01
 #endif
@@ -92,13 +96,13 @@
 	} GROOT_HEADER_PROTOCOL;
 #endif
 
-#ifndef GROOT_TOC
+#ifndef GROOT_SENSORS
 	typedef struct {
 		uint8_t co2;
 		uint8_t no;
 		uint8_t temp;
 		uint8_t humidity;
-	} GROOT_TOC;
+	} GROOT_SENSORS;
 #endif
 
 #ifndef GROOT_HEADER
@@ -110,7 +114,7 @@
 		uint16_t sample_id;
 		uint16_t sample_rate;
 		uint8_t aggregator;
-		GROOT_TOC sensors_required;
+		GROOT_SENSORS sensors_required;
 	} GROOT_HEADER;
 #endif
 
@@ -120,6 +124,7 @@
 		rimeaddr_t esender;
 		rimeaddr_t sender;
 		rimeaddr_t sender_bkup;
+		int last_sampled;
 		int *next;
 	} GROOT_QUERY_RW;
 #endif
@@ -148,11 +153,11 @@ groot_intent_snd();
 void
 groot_intent_rcv();
 
-void
-groot_subscribe_snd();
+int
+groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sample_rate, GROOT_SENSORS *data_required, uint8_t aggregator);
 
-void
-groot_subscribe_rcv();
+GROOT_QUERY_RW
+*groot_subscribe_rcv(GROOT_QUERY_RW *first_query, struct broadcast_conn *c, const rimeaddr_t *from);
 
 void
 groot_unsubscribe_snd();

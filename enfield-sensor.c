@@ -2,7 +2,7 @@
 #include "groot-sensor.h"
 #include <stdio.h>
 
-GROOT_TOC sensor_support = {.co2 = 1, .no = 1, .temp = 1, .humidity = 1};
+GROOT_SENSORS sensor_support = {.co2 = 1, .no = 1, .temp = 1, .humidity = 1};
 
 //Initialize Process information
 /*---------------------------------------------*/
