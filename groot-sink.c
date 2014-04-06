@@ -1,6 +1,7 @@
 #include "groot-sink.h"
 #include "contiki.h"
 #include <stdio.h>
+#include "net/rime.h"
 
 static GROOT_CHANNELS sink_chan;
 static uint16_t query_id = 0;
@@ -22,7 +23,9 @@ static const struct broadcast_callbacks sink_routing_bcast = {recv_routing};
 /*------------------------------- Main Function -----------------------------*/
 void
 sink_bootstrap(GROOT_SENSORS *supported_sensors){
-	printf("Sensor Starting.....\n");
+	printf("Sink Starting.....\n");
+	//Initialize protocol library
+	groot_init(supported_sensors);
 	//Open Channels needed
 	broadcast_open(&sink_chan.dc, GROOT_DATA_CHANNEL, &sink_data_bcast);
 	broadcast_open(&sink_chan.rc, GROOT_ROUTING_CHANNEL, &sink_routing_bcast);
@@ -36,7 +39,9 @@ sink_destroy(){
 
 int
 sink_subscribe(uint16_t sample_rate, GROOT_SENSORS *data_required, uint8_t aggregation){
-	//Start Subscribtion phase
+	//Increment Query ID
+	query_id += 1;
+	//Send Subscribtion
 	groot_subscribe_snd(&sink_chan.dc, query_id, sample_rate, data_required, aggregation);
 }
 

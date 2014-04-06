@@ -19,6 +19,14 @@
 	#define DEBUG_LEVEL 0
 #endif
 
+#ifndef GROOT_QUERY_LIMIT 
+ 	#define GROOT_QUERY_LIMIT 10
+#endif
+
+#ifndef GROOT_CHILD_LIMIT
+ 	#define GROOT_CHILD_LIMIT 5
+#endif
+
 /**
  * Routing Definitions
  */
@@ -89,13 +97,6 @@
 /**
  * PACKET INFO
  */
-#ifndef GROOT_HEADER_PROTOCOL
-	typedef struct {
-		uint8_t version;
-		uint8_t magic[2];
-	} GROOT_HEADER_PROTOCOL;
-#endif
-
 #ifndef GROOT_SENSORS
 	typedef struct {
 		uint8_t co2;
@@ -105,10 +106,18 @@
 	} GROOT_SENSORS;
 #endif
 
+#ifndef GROOT_HEADER_PROTOCOL
+	typedef struct {
+		uint8_t version;
+		uint8_t magic[2];
+	} GROOT_HEADER_PROTOCOL;
+#endif
+
 #ifndef GROOT_HEADER
 	typedef struct {
 		GROOT_HEADER_PROTOCOL protocol;
 		rimeaddr_t esender;
+		uint8_t is_cluster_head;
 		uint8_t type;
 		uint16_t query_id;
 		uint16_t sample_id;
@@ -118,25 +127,6 @@
 	} GROOT_HEADER;
 #endif
 
-#ifndef GROOT_QUERY_RW
-	typedef struct{
-		uint16_t query_id;
-		rimeaddr_t esender;
-		rimeaddr_t sender;
-		rimeaddr_t sender_bkup;
-		int last_sampled;
-		int *next;
-	} GROOT_QUERY_RW;
-#endif
-
-#ifndef GROOT_SRT_RW
-	typedef struct{
-		uint16_t query_id;
-		rimeaddr_t parent;
-		int *children;
-	} GROOT_SRT_RW;
-#endif
-
 #ifndef GROOT_SRT_CHILD
 	typedef struct{
 		rimeaddr_t child;
@@ -144,20 +134,34 @@
 	} GROOT_SRT_CHILD;
 #endif
 
+#ifndef GROOT_QUERY_ITEM
+	typedef struct{
+		uint16_t query_id;
+		rimeaddr_t esender;
+		rimeaddr_t parent;
+		rimeaddr_t parent_bkup;
+		int last_sampled;
+		GROOT_SRT_CHILD *children;
+	} GROOT_QUERY_ITEM;
+#endif
+
 /**
  * Method Definitions
  */
+void
+groot_jibda(GROOT_SENSORS *sensors);
+
+int
+groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sample_rate, GROOT_SENSORS *data_required, uint8_t aggregator);
+
+int
+groot_subscribe_rcv(struct broadcast_conn *c, const rimeaddr_t *from);
+
 void
 groot_intent_snd();
 
 void
 groot_intent_rcv();
-
-int
-groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sample_rate, GROOT_SENSORS *data_required, uint8_t aggregator);
-
-GROOT_QUERY_RW
-*groot_subscribe_rcv(GROOT_QUERY_RW *first_query, struct broadcast_conn *c, const rimeaddr_t *from);
 
 void
 groot_unsubscribe_snd();
