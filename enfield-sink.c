@@ -14,7 +14,7 @@
  *          future it can easily be added
  * 
  */
-GROOT_SENSORS sensor_support = {.co2 = 0, .no = 0, .temp = 0, .humidity = 0};
+struct GROOT_SENSORS sensor_support = {.co2 = 0, .no = 0, .temp = 0, .humidity = 0};
 
 //Initialize Process information
 /*---------------------------------------------*/
@@ -28,7 +28,7 @@ PROCESS_THREAD(enfield_sink, ev, data){
 
 	static uint16_t sample_rate = 10;
 	static uint8_t aggregation = GROOT_NO_AGGREGATION;
-	static GROOT_SENSORS data_required = {.co2 = 1, .no = 0, .temp = 1, .humidity = 0};
+	static struct GROOT_SENSORS data_required = {.co2 = 1, .no = 0, .temp = 1, .humidity = 0};
 	static int is_subscribed;
 
 	printf("SINK!! \n");
@@ -40,7 +40,7 @@ PROCESS_THREAD(enfield_sink, ev, data){
 
 		PROCESS_WAIT_EVENT_UNTIL(ev == sensors_event &&
 									data == &button_sensor);
-
+		printf("PRESSED BUTTON!! \n");
 		is_subscribed = sink_subscribe(sample_rate, &data_required, aggregation);
 	}
 

@@ -1,14 +1,14 @@
-#include "groot-sensor.h"
 #include "contiki.h"
+#include "groot-sensor.h"
 #include <stdio.h>
 #include "net/rime.h"
 
-static GROOT_CHANNELS sensor_chan;
-
+struct GROOT_CHANNELS sensor_chan;
 /*------------------------------ Callbacks ---------------------------------*/
 static void
 recv_data(struct broadcast_conn *c, const rimeaddr_t *from){
 	printf("Recevied Query!!");
+
 	//Handle new query
 	int is_success = groot_subscribe_rcv(c, from);
 	if(!is_success){
@@ -27,10 +27,10 @@ static const struct broadcast_callbacks sensor_data_bcast = {recv_data};
 static const struct broadcast_callbacks sensor_routing_bcast = {recv_routing};
 
 /*------------------------------ Main Functions ---------------------------*/
-void sensor_bootstrap(GROOT_SENSORS *support){
+void sensor_bootstrap(struct GROOT_SENSORS *support){	
 	printf("Sensor Starting.....\n");
 	//Initialize protocol library
-	groot_init(support);
+	groot_prot_init(support);
 	//Open Channels needed
 	broadcast_open(&sensor_chan.dc, GROOT_DATA_CHANNEL, &sensor_data_bcast);
 	broadcast_open(&sensor_chan.rc, GROOT_ROUTING_CHANNEL, &sensor_routing_bcast);

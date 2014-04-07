@@ -14,7 +14,7 @@
  * @param supported_sensors Pass the sink sensor capabilities
  */
 void
-sink_bootstrap(GROOT_SENSORS *supported_sensors);
+sink_bootstrap(struct GROOT_SENSORS *supported_sensors);
 
 /**
  * @brief When calling this function, a query will be generated and sent to sensors.
@@ -27,7 +27,7 @@ sink_bootstrap(GROOT_SENSORS *supported_sensors);
  * @param aggregation The aggregation needed on the data
  */
 int
-sink_subscribe(uint16_t sample_rate, GROOT_SENSORS *data_required, uint8_t aggregation);
+sink_subscribe(uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation);
 
 int
 sink_unsubscribe();
