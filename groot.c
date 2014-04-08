@@ -14,6 +14,37 @@ MEMB(groot_qrys, struct GROOT_QUERY_ITEM, GROOT_QUERY_LIMIT);
 static struct GROOT_SENSORS supported_sensors;
 /*------------------------------------------------- Debug Methods -------------------------------------------------------*/
 static void
+print_raw_packetbuf(void){
+  uint16_t i;
+  for(i = 0; i < packetbuf_hdrlen(); i++) {
+    printf("%02x ", *(char *)(packetbuf_hdrptr() + i));
+  }
+  printf("| ");
+  for(i = 0; i < packetbuf_datalen(); i++) {
+    printf("%02x ", *(char *)(packetbuf_dataptr() + i));
+  }
+  printf("[%d]\n", (int16_t) (packetbuf_dataptr() - packetbuf_hdrptr()));
+}
+
+static void
+print_hdr(struct GROOT_HEADER *hdr){
+	printf("HEADER ");
+	PRINT2ADDR(&rimeaddr_node_addr);
+	printf(" - { Source: ");
+	PRINT2ADDR(&hdr->esender);
+	printf(" Version: %d MAGIC: %c%c ", hdr->protocol.version, hdr->protocol.magic[0], hdr->protocol.magic[1]);
+	printf("Type: %02x Query ID: %d } \n", hdr->type, hdr->query_id);
+}
+
+static void
+print_qry(struct GROOT_QUERY *qry){
+	printf("QUERY ");
+	PRINT2ADDR(&rimeaddr_node_addr);
+	printf(" - { Sample Rate: %d Aggregator: %d } - ", qry->sample_rate, qry->aggregator);
+	printf(" { CO2 - %d NO - %d TEMP - %d HUMIDITY - %d } \n", qry->sensors_required.co2, qry->sensors_required.no, qry->sensors_required.temp, qry->sensors_required.humidity);
+}
+
+static void
 print_qrys(){
 	struct GROOT_QUERY_ITEM *qry_itm;
 
@@ -44,6 +75,42 @@ is_groot_protocol(struct GROOT_HEADER *hdr){
 	return 1;
 }
 
+static uint8_t
+is_capable(struct GROOT_SENSORS *qry_sensors){
+	if((qry_sensors->co2 == 1 && supported_sensors.co2 == 0) ||
+		(qry_sensors->no == 1 && supported_sensors.no == 0) ||
+		(qry_sensors->temp == 1 && supported_sensors.temp == 0) ||
+		(qry_sensors->humidity == 1 && supported_sensors.humidity == 0)){
+		return 0;
+	}
+
+	return 1;
+}
+
+static void
+packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t query_id, const rimeaddr_t *esender, 
+	const rimeaddr_t *from, uint8_t type, uint16_t sample_rate, struct GROOT_SENSORS *data_required, 
+	uint8_t aggregator, uint16_t sample_id){
+
+	//QRY BODY
+	qry->sample_id = sample_id;
+	qry->sample_rate = sample_rate;
+	qry->aggregator = aggregator;
+	memcpy(&qry->sensors_required, data_required, sizeof(struct GROOT_SENSORS));
+
+	//Initialise query header
+	hdr->protocol.version = GROOT_VERSION;
+	hdr->protocol.magic[0] = 'G';
+	hdr->protocol.magic[1] = 'T';
+	
+	//Main Variables
+	rimeaddr_copy(&hdr->esender, esender);
+	rimeaddr_copy(&hdr->received_from, from);
+	hdr->is_cluster_head = 0;
+	hdr->type = type;
+	hdr->query_id = query_id;
+}
+
 static void
 packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry){
 	packetbuf_clear();
@@ -55,11 +122,15 @@ packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry){
 	memcpy(pkt_qry, qry, sizeof(struct GROOT_QUERY));
 }
 
-static void
-qry_to_list(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
+static struct  GROOT_QUERY_ITEM
+*qry_to_list(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry_bdy, const rimeaddr_t *from){
 	struct GROOT_QUERY_ITEM *new_item;
-	struct GROOT_QUERY *qry_bdy;
 	
+	//LIST and all MEMORY USED
+	if(list_length(groot_qry_table) >= GROOT_QUERY_LIMIT){
+		return NULL;
+	}
+
 	new_item = memb_alloc(&groot_qrys);
 	list_add(groot_qry_table, new_item);
 
@@ -72,13 +143,12 @@ qry_to_list(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	//Never Sampled
 	new_item->last_sampled = 0;
 	//@todo add Children
-			
-	qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
 
 	//Copy Query Values into row
 	memcpy(&new_item->query, qry_bdy, sizeof(struct GROOT_QUERY));
 
 	print_qrys();
+	return new_item;
 }
 
 static uint8_t
@@ -113,23 +183,13 @@ int
 groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator){
 	struct GROOT_HEADER hdr;
 	struct GROOT_QUERY qry;
+	rimeaddr_t esender;
+	static rimeaddr_t received_from;
 
-	//QRY BODY
-	qry.sample_id = 0;
-	qry.sample_rate = sample_rate;
-	qry.aggregator = aggregator;
-	memcpy(&qry.sensors_required, data_required, sizeof(struct GROOT_SENSORS));
+	rimeaddr_copy(&received_from, &rimeaddr_null);
+	rimeaddr_copy(&esender, &rimeaddr_node_addr);
 
-	//Initialise query header
-	hdr.protocol.version = GROOT_VERSION;
-	hdr.protocol.magic[0] = 'G';
-	hdr.protocol.magic[1] = 'T';
-	
-	//Main Variables
-	rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
-	hdr.is_cluster_head = 0;
-	hdr.type = GROOT_SUBSCRIBE_TYPE;
-	hdr.query_id = query_id;
+	packet_qry_creator(&hdr, &qry, query_id, &esender, &received_from, GROOT_SUBSCRIBE_TYPE, sample_rate, data_required, aggregator, 0);
 
 	//Create Query Packet
 	packet_loader_qry(&hdr, &qry);
@@ -143,10 +203,20 @@ groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sampl
 int
 groot_subscribe_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 	struct GROOT_HEADER *hdr;
+	struct GROOT_HEADER snd_hdr;
+	struct GROOT_QUERY *qry_bdy; 
+	struct GROOT_QUERY snd_bdy;
+	struct GROOT_QUERY_ITEM *lst_itm;
 	uint8_t type;
 
 	hdr = (struct GROOT_HEADER*) packetbuf_dataptr();
-	
+	qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
+
+	//I just sent this packet ignore
+	if(rimeaddr_cmp(&hdr->received_from, &rimeaddr_node_addr)){
+		return 0;
+	}
+
 	//Is not correct protocol
 	if(!is_groot_protocol(hdr)){
 		return 0;
@@ -156,15 +226,36 @@ groot_subscribe_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 	switch(type){
 		case GROOT_SUBSCRIBE_TYPE:
 			//Can I handle this?
-			printf("SUBSCRIBING!! \n");
-
+			//@todo should the message still be bcast?
 			if(!is_new_query(hdr->query_id, &hdr->esender)){
 				return 0;
 			}
 
+			//Check that I have all the sensors needed
+			if(!is_capable(&qry_bdy->sensors_required)){
+				rimeaddr_copy(&hdr->received_from, from);
+				broadcast_send(c);
+				return 1;
+			}
+
 			printf("NEW QUERY!! \n");
-			qry_to_list(hdr, from);
-			//Broadcast message if no head available be as head!
+			//Add the new qry to the table
+			lst_itm = qry_to_list(hdr, qry_bdy, from);
+			//NOT added to the table just bcast. Maybe full
+			if(lst_itm == NULL){
+				rimeaddr_copy(&hdr->received_from, from);
+				broadcast_send(c);
+				return 0;
+			}
+
+			//Re-Broadcast Query so next neighbours can see it.
+			packet_qry_creator(&snd_hdr, &snd_bdy, lst_itm->query_id, &lst_itm->esender, from, GROOT_SUBSCRIBE_TYPE,
+				lst_itm->query.sample_rate, &lst_itm->query.sensors_required, lst_itm->query.aggregator, lst_itm->query.sample_id);
+
+			//Create Query Packet
+			packet_loader_qry(&snd_hdr, &snd_bdy);
+			//Send packet
+			broadcast_send(c);
 			break;
 		case GROOT_UNSUBSCRIBE_TYPE:
 			//Do I have this query?
