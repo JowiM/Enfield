@@ -159,23 +159,23 @@ static struct  GROOT_QUERY_ITEM
 	return new_item;
 }
 
-static uint8_t
-is_new_query(uint16_t query_id, const rimeaddr_t *esender){
+static struct GROOT_QUERY_ITEM
+*find_query(uint16_t query_id, const rimeaddr_t *esender){
 	struct GROOT_QUERY_ITEM *i;
 
 	if(list_length(groot_qry_table) == 0){
-		return 1;
+		return NULL;
 	}
 
 	i = list_head(groot_qry_table);
 	while(i != NULL){
 		if(i->query_id == query_id && rimeaddr_cmp(&i->esender, esender)){
-			return 0;
+			return i;
 		}
 		i = i->next;
 	}
 
-	return 1;
+	return NULL;
 }
 
 /*--------------------------------------------- Main Methods ------------------------------------------------------------*/
@@ -239,9 +239,8 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 	uint8_t type;
 
 	hdr = (struct GROOT_HEADER*) packetbuf_dataptr();
-
 	//I just sent this packet ignore
-	if(rimeaddr_cmp(&hdr->received_from, &rimeaddr_node_addr)){
+	if(rimeaddr_cmp(&hdr->received_from, &rimeaddr_node_addr) == 1){
 		return 0;
 	}
 
@@ -255,10 +254,9 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 		case GROOT_SUBSCRIBE_TYPE:
 			//Get Query from buffer
 			qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
-			
 			//Can I handle this?
 			//@todo should the message still be bcast?
-			if(!is_new_query(hdr->query_id, &hdr->esender)){
+			if(find_query(hdr->query_id, &hdr->esender) != NULL){
 				return 0;
 			}
 
@@ -269,7 +267,6 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 				return 1;
 			}
 
-			printf("NEW QUERY!! \n");
 			//Add the new qry to the table
 			lst_itm = qry_to_list(hdr, qry_bdy, from);
 			//NOT added to the table just bcast. Maybe full
@@ -292,6 +289,17 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 		case GROOT_UNSUBSCRIBE_TYPE:
 			//Do I have this query?
 			printf("UNSUBSRIBING!! \n");
+
+			lst_itm = find_query(hdr->query_id, &hdr->esender);
+			if(lst_itm != NULL){
+				list_remove(groot_qry_table, lst_itm);
+				memb_free(&groot_qrys, lst_itm);
+				memset(lst_itm, ' ', sizeof(struct GROOT_QUERY_ITEM));
+			}
+
+			rimeaddr_copy(&hdr->received_from, from);
+			broadcast_send(c);
+
 			break;
 		case GROOT_NEW_MOTE_TYPE:
 			//New mote wants in! Check if query he can join!
