@@ -162,16 +162,16 @@ int
 groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator);
 
 int
-groot_subscribe_rcv(struct broadcast_conn *c, const rimeaddr_t *from);
+groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from);
+
+int
+groot_unsubscribe_snd(struct broadcast_conn *dc, uint16_t query_id);
 
 void
 groot_intent_snd();
 
 void
 groot_intent_rcv();
-
-void
-groot_unsubscribe_snd();
 
 void
 groot_unsubscribe_rcv();

@@ -113,13 +113,21 @@ packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t q
 
 static void
 packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry){
+	int data_l = sizeof(struct GROOT_HEADER);
+	if(qry != NULL){
+		data_l += sizeof(struct GROOT_QUERY);
+	}
+
 	packetbuf_clear();
-	packetbuf_set_datalen(sizeof(struct GROOT_HEADER)+sizeof(struct GROOT_QUERY));
+	packetbuf_set_datalen(data_l);
 	
 	struct GROOT_HEADER *pkt_hdr = packetbuf_dataptr();
 	memcpy(pkt_hdr, hdr, sizeof(struct GROOT_HEADER));
-	struct GROOT_QUERY *pkt_qry = (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
-	memcpy(pkt_qry, qry, sizeof(struct GROOT_QUERY));
+
+	if(qry != NULL){
+		struct GROOT_QUERY *pkt_qry = (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
+		memcpy(pkt_qry, qry, sizeof(struct GROOT_QUERY));
+	}
 }
 
 static struct  GROOT_QUERY_ITEM
@@ -197,20 +205,40 @@ groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sampl
 	printf("SENDING!!! \n");
 	//Send packet
 	broadcast_send(dc);
-	return 0;
+	return 1;
 }
 
 int
-groot_subscribe_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
-	struct GROOT_HEADER *hdr;
+groot_unsubscribe_snd(struct broadcast_conn *dc, uint16_t query_id){
+	struct GROOT_HEADER hdr;
+	
+	hdr.protocol.version = GROOT_VERSION;
+	hdr.protocol.magic[0] = 'G';
+	hdr.protocol.magic[1] = 'T';
+
+	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
+	rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
+
+	hdr.is_cluster_head = 0;
+	hdr.type = GROOT_UNSUBSCRIBE_TYPE;
+	hdr.query_id = query_id;
+
+	packet_loader_qry(&hdr, NULL);
+
+	broadcast_send(dc);
+	return 1;
+}
+
+int
+groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
+	struct GROOT_HEADER *hdr = NULL;
 	struct GROOT_HEADER snd_hdr;
-	struct GROOT_QUERY *qry_bdy; 
+	struct GROOT_QUERY *qry_bdy = NULL; 
 	struct GROOT_QUERY snd_bdy;
-	struct GROOT_QUERY_ITEM *lst_itm;
+	struct GROOT_QUERY_ITEM *lst_itm = NULL;
 	uint8_t type;
 
 	hdr = (struct GROOT_HEADER*) packetbuf_dataptr();
-	qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
 
 	//I just sent this packet ignore
 	if(rimeaddr_cmp(&hdr->received_from, &rimeaddr_node_addr)){
@@ -225,6 +253,9 @@ groot_subscribe_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 	type = hdr->type;
 	switch(type){
 		case GROOT_SUBSCRIBE_TYPE:
+			//Get Query from buffer
+			qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
+			
 			//Can I handle this?
 			//@todo should the message still be bcast?
 			if(!is_new_query(hdr->query_id, &hdr->esender)){
@@ -256,6 +287,7 @@ groot_subscribe_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 			packet_loader_qry(&snd_hdr, &snd_bdy);
 			//Send packet
 			broadcast_send(c);
+
 			break;
 		case GROOT_UNSUBSCRIBE_TYPE:
 			//Do I have this query?
@@ -283,11 +315,6 @@ groot_intent_snd(){
 
 void
 groot_intent_rcv(){
-
-}
-
-void
-groot_unsubscribe_snd(){
 
 }
 

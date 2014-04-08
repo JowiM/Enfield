@@ -42,6 +42,7 @@ PROCESS_THREAD(enfield_sink, ev, data){
 									data == &button_sensor);
 		printf("PRESSED BUTTON!! \n");
 		is_subscribed = sink_subscribe(sample_rate, &data_required, aggregation);
+		is_subscribed = sink_unsubscribe(4);
 	}
 
 	PROCESS_END();

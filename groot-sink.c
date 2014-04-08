@@ -39,7 +39,6 @@ sink_destroy(){
 
 int
 sink_subscribe(uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation){
-	printf("SUBSCRIBE CALL!! \n");
 	//Increment Query ID
 	query_id += 1;
 	//Send Subscribtion
@@ -47,8 +46,8 @@ sink_subscribe(uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_
 }
 
 int
-sink_unsubscribe(){
-
+sink_unsubscribe(uint16_t query_id){
+	groot_unsubscribe_snd(&sink_chan.dc, query_id);
 }
 
 int

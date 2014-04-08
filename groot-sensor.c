@@ -10,7 +10,7 @@ recv_data(struct broadcast_conn *c, const rimeaddr_t *from){
 	printf("Recevied Query!!");
 
 	//Handle new query
-	int is_success = groot_subscribe_rcv(c, from);
+	int is_success = groot_rcv(c, from);
 	if(!is_success){
 		return;
 	}
