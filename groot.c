@@ -12,6 +12,7 @@ LIST(groot_qry_table);
 MEMB(groot_qrys, struct GROOT_QUERY_ITEM, GROOT_QUERY_LIMIT);
 
 static struct GROOT_SENSORS supported_sensors;
+static struct GROOT_LOCAL glocal;
 /*------------------------------------------------- Debug Methods -------------------------------------------------------*/
 static void
 print_raw_packetbuf(void){
@@ -149,7 +150,7 @@ static struct  GROOT_QUERY_ITEM
 	//@todo request to join cluster
 	new_item->has_cluster_head = 0;
 	//Never Sampled
-	new_item->last_sampled = 0;
+	new_item->last_sampled = clock_seconds();
 	//@todo add Children
 
 	//Copy Query Values into row
@@ -176,6 +177,42 @@ static struct GROOT_QUERY_ITEM
 	}
 
 	return NULL;
+}
+
+static void
+send_samples(){
+	return;
+}
+
+static void
+sampler_checker(){
+	printf("SAMPLER CHECKER \n");
+	struct GROOT_QUERY_ITEM *tmp;
+
+	tmp = list_head(groot_qry_table);
+	while(tmp != NULL){
+			printf("SAMPLES: %d - %d \n", clock_seconds(), (tmp->last_sampled+tmp->query.sample_rate));
+			if(clock_seconds() < (tmp->last_sampled + tmp->query.sample_rate)){
+				tmp = list_item_next(tmp);
+				continue;
+			}
+			printf("SEND SAMPLE \n");
+			//Calculate and Send Samples
+			send_samples(tmp);
+			tmp->last_sampled = clock_seconds();
+			tmp = list_item_next(tmp);
+	}
+	ctimer_set(&glocal.sampler_ctimer, GROOT_SAMPLER, sampler_checker, &glocal.cb_vars);
+}
+
+static void
+sample_timer_tweeker(){
+	printf("TWEEKER \n");
+	if(ctimer_expired(&glocal.sampler_ctimer) <= 0){
+		return;
+	}
+	printf("START TIMER! \n");
+	ctimer_set(&glocal.sampler_ctimer, GROOT_SAMPLER, sampler_checker, &glocal.cb_vars);
 }
 
 /*--------------------------------------------- Main Methods ------------------------------------------------------------*/
@@ -275,6 +312,8 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 				broadcast_send(c);
 				return 0;
 			}
+
+			sample_timer_tweeker();
 
 			//Re-Broadcast Query so next neighbours can see it.
 			packet_qry_creator(&snd_hdr, &snd_bdy, lst_itm->query_id, &lst_itm->esender, from, GROOT_SUBSCRIBE_TYPE,

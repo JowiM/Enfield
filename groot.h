@@ -19,6 +19,11 @@
 	#define DEBUG_LEVEL 0
 #endif
 
+#ifndef GROOT_SAMPLER
+ 	#define GROOT_SAMPLER 1*CLOCK_SECOND
+
+#endif
+
 #ifndef GROOT_QUERY_LIMIT 
  	#define GROOT_QUERY_LIMIT 5
 #endif
@@ -147,9 +152,23 @@
 		rimeaddr_t esender;
 		rimeaddr_t parent;
 		uint8_t has_cluster_head;
-		int last_sampled;
+		unsigned long last_sampled;
 		struct GROOT_QUERY query;
 	};
+#endif
+
+#ifndef GROOT_CB
+	struct GROOT_CB{
+		int tmp;
+	};
+#endif
+
+#ifndef GROOT_LOCAL
+ 	struct GROOT_LOCAL{
+ 		struct ctimer sampler_ctimer;
+ 		struct GROOT_CB cb_vars;
+ 		struct GROOT_SENSORS supported_sensors;
+ 	};
 #endif
 
 /**
