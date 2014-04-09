@@ -33,7 +33,7 @@ int
 sink_unsubscribe(uint16_t query_id);
 
 int
-sink_send();
+sink_send(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation);
 
 void
 sink_destroy();

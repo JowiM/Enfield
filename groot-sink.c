@@ -57,7 +57,7 @@ sink_destroy(){
 int
 sink_subscribe(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation){
 	//Send Subscribtion
-	groot_subscribe_snd(query_id, sample_rate, data_required, aggregation);
+	groot_qry_snd(query_id, GROOT_SUBSCRIBE_TYPE, sample_rate, data_required, aggregation);
 }
 
 int
@@ -66,6 +66,7 @@ sink_unsubscribe(uint16_t query_id){
 }
 
 int
-sink_send(){
-
+sink_send(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation){
+	//Send Subscribtion
+	groot_qry_snd(query_id, GROOT_ALTERATION_TYPE, sample_rate, data_required, aggregation);
 }

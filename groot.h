@@ -65,6 +65,9 @@
  	#define GROOT_NEW_MOTE_TYPE 0x03
 #endif
 
+#ifndef GROOT_ALTERATION_TYPE
+ 	#define GROOT_ALTERATION_TYPE 0x04
+#endif
 #ifndef GROOT_PUBLISH_TYPE
  	#define GROOT_PUBLISH_TYPE 0xC8
 #endif
@@ -187,7 +190,7 @@ void
 groot_prot_init(struct GROOT_SENSORS *sensors, struct GROOT_CHANNELS *channels);
 
 int
-groot_subscribe_snd(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator);
+groot_qry_snd(uint16_t query_id, uint8_t type, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator);
 
 int
 groot_rcv(const rimeaddr_t *from);
@@ -200,9 +203,3 @@ groot_intent_snd();
 
 void
 groot_intent_rcv();
-
-void
-groot_alternate_snd();
-
-void
-groot_alternate_rcv();

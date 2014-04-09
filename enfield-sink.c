@@ -28,7 +28,7 @@ PROCESS_THREAD(enfield_sink, ev, data){
 	PROCESS_BEGIN();
 	
 
-	static uint16_t sample_rate = 1*CLOCK_SECOND;
+	static uint16_t sample_rate = 13*CLOCK_SECOND;
 	static uint8_t aggregation = GROOT_NO_AGGREGATION;
 	static struct GROOT_SENSORS data_required = {.co2 = 1, .no = 0, .temp = 1, .humidity = 0};
 	static int is_subscribed;
