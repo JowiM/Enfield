@@ -19,13 +19,12 @@
 	#define DEBUG_LEVEL 0
 #endif
 
-#ifndef GROOT_SAMPLER
- 	#define GROOT_SAMPLER 1*CLOCK_SECOND
-
+#ifndef GROOT_RM_UNSUBSCRIBE
+ 	#define GROOT_RM_UNSUBSCRIBE 5*CLOCK_SECOND
 #endif
 
 #ifndef GROOT_QUERY_LIMIT 
- 	#define GROOT_QUERY_LIMIT 5
+ 	#define GROOT_QUERY_LIMIT 10
 #endif
 
 #ifndef GROOT_CHILD_LIMIT
@@ -94,8 +93,8 @@
  */
 #ifndef GROOT_CHANNELS
  struct GROOT_CHANNELS{
- 	struct broadcast_conn dc;
- 	struct broadcast_conn rc;
+ 	struct broadcast_conn bc;
+ 	struct runicast_conn rc;
  };
 #endif
 
@@ -151,23 +150,20 @@
 		uint16_t query_id;
 		rimeaddr_t esender;
 		rimeaddr_t parent;
+		rimeaddr_t parent_bkup;
 		uint8_t has_cluster_head;
-		unsigned long last_sampled;
+		uint8_t is_serviced;
+		unsigned long unsubscribed;
+		struct ctimer query_timer;
 		struct GROOT_QUERY query;
-	};
-#endif
-
-#ifndef GROOT_CB
-	struct GROOT_CB{
-		int tmp;
 	};
 #endif
 
 #ifndef GROOT_LOCAL
  	struct GROOT_LOCAL{
- 		struct ctimer sampler_ctimer;
- 		struct GROOT_CB cb_vars;
- 		struct GROOT_SENSORS supported_sensors;
+ 		struct ctimer unsub_ctimer;
+ 		struct GROOT_SENSORS sensors;
+ 		struct GROOT_CHANNELS *channels;
  	};
 #endif
 
@@ -175,16 +171,16 @@
  * Method Definitions
  */
 void
-groot_prot_init(struct GROOT_SENSORS *sensors);
+groot_prot_init(struct GROOT_SENSORS *sensors, struct GROOT_CHANNELS *channels);
 
 int
-groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator);
+groot_subscribe_snd(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator);
 
 int
-groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from);
+groot_rcv(const rimeaddr_t *from);
 
 int
-groot_unsubscribe_snd(struct broadcast_conn *dc, uint16_t query_id);
+groot_unsubscribe_snd(uint16_t query_id);
 
 void
 groot_intent_snd();

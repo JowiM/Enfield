@@ -11,7 +11,6 @@
 LIST(groot_qry_table);
 MEMB(groot_qrys, struct GROOT_QUERY_ITEM, GROOT_QUERY_LIMIT);
 
-static struct GROOT_SENSORS supported_sensors;
 static struct GROOT_LOCAL glocal;
 /*------------------------------------------------- Debug Methods -------------------------------------------------------*/
 static void
@@ -65,6 +64,32 @@ print_qrys(){
 }
 
 /*------------------------------------------------- Other Methods ----------------------------------------------------------*/
+static void
+cb_sampler(void *i){
+	struct GROOT_QUERY_ITEM *qry_itm = (struct GROOT_QUERY_ITEM *)i;
+	printf("CALLBACK FOR: %d \n", qry_itm->query_id);
+
+	
+	
+	ctimer_set(&qry_itm->query_timer, qry_itm->query.sample_rate, cb_sampler, qry_itm);
+	return;
+}
+
+static void
+cb_rm_query(void *i){
+	printf("REMOVING QUERY!! \n");
+	struct GROOT_QUERY_ITEM *lst_itm = (struct GROOT_QUERY_ITEM *)i;
+	
+	if(!ctimer_expired(&lst_itm->query_timer)){
+		//Stop Sampe timer
+		ctimer_stop(&lst_itm->query_timer);
+	}
+
+	list_remove(groot_qry_table, lst_itm);
+	memb_free(&groot_qrys, lst_itm);
+	memset(lst_itm, ' ', sizeof(struct GROOT_QUERY_ITEM));
+}
+
 static uint8_t
 is_groot_protocol(struct GROOT_HEADER *hdr){
 	if(hdr->protocol.version != GROOT_VERSION){
@@ -78,10 +103,10 @@ is_groot_protocol(struct GROOT_HEADER *hdr){
 
 static uint8_t
 is_capable(struct GROOT_SENSORS *qry_sensors){
-	if((qry_sensors->co2 == 1 && supported_sensors.co2 == 0) ||
-		(qry_sensors->no == 1 && supported_sensors.no == 0) ||
-		(qry_sensors->temp == 1 && supported_sensors.temp == 0) ||
-		(qry_sensors->humidity == 1 && supported_sensors.humidity == 0)){
+	if((qry_sensors->co2 == 1 && glocal.sensors.co2 == 0) ||
+		(qry_sensors->no == 1 && glocal.sensors.no == 0) ||
+		(qry_sensors->temp == 1 && glocal.sensors.temp == 0) ||
+		(qry_sensors->humidity == 1 && glocal.sensors.humidity == 0)){
 		return 0;
 	}
 
@@ -132,7 +157,7 @@ packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry){
 }
 
 static struct  GROOT_QUERY_ITEM
-*qry_to_list(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry_bdy, const rimeaddr_t *from){
+*qry_to_list(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry_bdy, const rimeaddr_t *from, uint8_t is_serviced){
 	struct GROOT_QUERY_ITEM *new_item;
 	
 	//LIST and all MEMORY USED
@@ -146,17 +171,25 @@ static struct  GROOT_QUERY_ITEM
 	new_item->query_id = hdr->query_id;
 	rimeaddr_copy(&new_item->esender, &hdr->esender);
 	rimeaddr_copy(&new_item->parent, from);
+	rimeaddr_copy(&new_item->parent_bkup, &rimeaddr_null);
 	//Is sender a cluster head?
 	//@todo request to join cluster
 	new_item->has_cluster_head = 0;
 	//Never Sampled
-	new_item->last_sampled = clock_seconds();
+	new_item->is_serviced = is_serviced;
+	//When unsubscribe received set this time
+	new_item->unsubscribed = 0;
 	//@todo add Children
 
 	//Copy Query Values into row
 	memcpy(&new_item->query, qry_bdy, sizeof(struct GROOT_QUERY));
 
+	//If the query is serviced by this node create callback function to send samples
+	if(is_serviced > 0){
+		ctimer_set(&new_item->query_timer, qry_bdy->sample_rate, cb_sampler, new_item);
+	}
 	print_qrys();
+
 	return new_item;
 }
 
@@ -179,53 +212,20 @@ static struct GROOT_QUERY_ITEM
 	return NULL;
 }
 
-static void
-send_samples(){
-	return;
-}
-
-static void
-sampler_checker(){
-	printf("SAMPLER CHECKER \n");
-	struct GROOT_QUERY_ITEM *tmp;
-
-	tmp = list_head(groot_qry_table);
-	while(tmp != NULL){
-			printf("SAMPLES: %d - %d \n", clock_seconds(), (tmp->last_sampled+tmp->query.sample_rate));
-			if(clock_seconds() < (tmp->last_sampled + tmp->query.sample_rate)){
-				tmp = list_item_next(tmp);
-				continue;
-			}
-			printf("SEND SAMPLE \n");
-			//Calculate and Send Samples
-			send_samples(tmp);
-			tmp->last_sampled = clock_seconds();
-			tmp = list_item_next(tmp);
-	}
-	ctimer_set(&glocal.sampler_ctimer, GROOT_SAMPLER, sampler_checker, &glocal.cb_vars);
-}
-
-static void
-sample_timer_tweeker(){
-	printf("TWEEKER \n");
-	if(ctimer_expired(&glocal.sampler_ctimer) <= 0){
-		return;
-	}
-	printf("START TIMER! \n");
-	ctimer_set(&glocal.sampler_ctimer, GROOT_SAMPLER, sampler_checker, &glocal.cb_vars);
-}
-
 /*--------------------------------------------- Main Methods ------------------------------------------------------------*/
 void
-groot_prot_init(struct GROOT_SENSORS *sensors){
+groot_prot_init(struct GROOT_SENSORS *sensors, struct GROOT_CHANNELS *channels){
+	//Initialise data structures
 	list_init(groot_qry_table);
 	memb_init(&groot_qrys);
 	//Copy Current Sensors
-	memcpy(&supported_sensors, sensors, sizeof(struct GROOT_SENSORS));
+	memcpy(&glocal.sensors, sensors, sizeof(struct GROOT_SENSORS));
+	//Set local channels
+	glocal.channels = channels;
 }
 
 int
-groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator){
+groot_subscribe_snd(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator){
 	struct GROOT_HEADER hdr;
 	struct GROOT_QUERY qry;
 	rimeaddr_t esender;
@@ -241,12 +241,12 @@ groot_subscribe_snd(struct broadcast_conn *dc, uint16_t query_id, uint16_t sampl
 	
 	printf("SENDING!!! \n");
 	//Send packet
-	broadcast_send(dc);
+	broadcast_send(&glocal.channels->bc);
 	return 1;
 }
 
 int
-groot_unsubscribe_snd(struct broadcast_conn *dc, uint16_t query_id){
+groot_unsubscribe_snd(uint16_t query_id){
 	struct GROOT_HEADER hdr;
 	
 	hdr.protocol.version = GROOT_VERSION;
@@ -262,18 +262,18 @@ groot_unsubscribe_snd(struct broadcast_conn *dc, uint16_t query_id){
 
 	packet_loader_qry(&hdr, NULL);
 
-	broadcast_send(dc);
+	broadcast_send(&glocal.channels->bc);
 	return 1;
 }
 
 int
-groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
+groot_rcv(const rimeaddr_t *from){
 	struct GROOT_HEADER *hdr = NULL;
 	struct GROOT_HEADER snd_hdr;
 	struct GROOT_QUERY *qry_bdy = NULL; 
 	struct GROOT_QUERY snd_bdy;
-	struct GROOT_QUERY_ITEM *lst_itm = NULL;
-	uint8_t type;
+	struct GROOT_QUERY_ITEM *srch_item, *lst_itm = NULL;
+	uint8_t type, is_serviced;
 
 	hdr = (struct GROOT_HEADER*) packetbuf_dataptr();
 	//I just sent this packet ignore
@@ -291,29 +291,30 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 		case GROOT_SUBSCRIBE_TYPE:
 			//Get Query from buffer
 			qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
-			//Can I handle this?
-			//@todo should the message still be bcast?
-			if(find_query(hdr->query_id, &hdr->esender) != NULL){
+			//Already Saved
+			srch_item = find_query(hdr->query_id, &hdr->esender);
+			if(srch_item != NULL){
+				//Set Bkup connection
+				if(rimeaddr_cmp(&srch_item->parent_bkup, &rimeaddr_null) > 0){
+					rimeaddr_copy(&srch_item->parent_bkup, from);
+				}
 				return 0;
 			}
 
 			//Check that I have all the sensors needed
+			is_serviced = 1;
 			if(!is_capable(&qry_bdy->sensors_required)){
-				rimeaddr_copy(&hdr->received_from, from);
-				broadcast_send(c);
-				return 1;
+				is_serviced = 0;
 			}
+			printf("IS SERVICED: %d \n", is_serviced);
 
 			//Add the new qry to the table
-			lst_itm = qry_to_list(hdr, qry_bdy, from);
-			//NOT added to the table just bcast. Maybe full
+			lst_itm = qry_to_list(hdr, qry_bdy, from, is_serviced);
+			printf("ST ITEM %d \n", lst_itm);
+			//NOT added to the table do nothing. FOLLOWS ASSUMPTION ALL QUERIES WILL BE SAVED
 			if(lst_itm == NULL){
-				rimeaddr_copy(&hdr->received_from, from);
-				broadcast_send(c);
 				return 0;
 			}
-
-			sample_timer_tweeker();
 
 			//Re-Broadcast Query so next neighbours can see it.
 			packet_qry_creator(&snd_hdr, &snd_bdy, lst_itm->query_id, &lst_itm->esender, from, GROOT_SUBSCRIBE_TYPE,
@@ -322,7 +323,13 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 			//Create Query Packet
 			packet_loader_qry(&snd_hdr, &snd_bdy);
 			//Send packet
-			broadcast_send(c);
+			printf("SENDING BCAST FROM SENSOR!! - ");
+			PRINT2ADDR(&rimeaddr_node_addr);
+			printf("\n");
+			broadcast_send(&glocal.channels->bc);
+
+			//Clean up packet buffer
+			packetbuf_clear();
 
 			break;
 		case GROOT_UNSUBSCRIBE_TYPE:
@@ -330,14 +337,17 @@ groot_rcv(struct broadcast_conn *c, const rimeaddr_t *from){
 			printf("UNSUBSRIBING!! \n");
 
 			lst_itm = find_query(hdr->query_id, &hdr->esender);
-			if(lst_itm != NULL){
-				list_remove(groot_qry_table, lst_itm);
-				memb_free(&groot_qrys, lst_itm);
-				memset(lst_itm, ' ', sizeof(struct GROOT_QUERY_ITEM));
+			//Return if item already deleted or already bcast the unsubscribed
+			if(lst_itm == NULL || lst_itm->unsubscribed != 0){
+				return 0;
 			}
 
+			lst_itm->unsubscribed = clock_seconds();
+			//Keep the query in the file for a few seconds to stop rebroadcasting
+			ctimer_set(&glocal.unsub_ctimer, GROOT_RM_UNSUBSCRIBE, cb_rm_query, lst_itm);			
+
 			rimeaddr_copy(&hdr->received_from, from);
-			broadcast_send(c);
+			broadcast_send(&glocal.channels->bc);
 
 			break;
 		case GROOT_NEW_MOTE_TYPE:

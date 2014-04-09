@@ -27,7 +27,7 @@ sink_bootstrap(struct GROOT_SENSORS *supported_sensors);
  * @param aggregation The aggregation needed on the data
  */
 int
-sink_subscribe(uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation);
+sink_subscribe(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation);
 
 int
 sink_unsubscribe(uint16_t query_id);

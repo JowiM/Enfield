@@ -16,8 +16,10 @@ AUTOSTART_PROCESSES(&enfield_sensor);
 /*---------------------------------------------*/
 
 PROCESS_THREAD(enfield_sensor, ev, data){
+	PROCESS_EXITHANDLER(;)
+
 	PROCESS_BEGIN();
-	PROCESS_EXITHANDLER(sensor_destroy());
+	
 	printf("SENSOR!!\n");
 
 	sensor_bootstrap(&sensor_support);
@@ -27,6 +29,7 @@ PROCESS_THREAD(enfield_sensor, ev, data){
 
 		PROCESS_WAIT_EVENT_UNTIL(ev == sensors_event &&
 									data == &button_sensor);
+		printf("TEST \n");
 	}
 
 	PROCESS_END();

@@ -10,7 +10,4 @@ void
 sensor_bootstrap(struct GROOT_SENSORS *support);
 
 int
-sensor_publish();
-
-int
 sensor_destroy();
