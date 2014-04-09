@@ -31,6 +31,10 @@
  	#define GROOT_CHILD_LIMIT 3
 #endif
 
+#ifndef MAX_RETRANSMISSION
+ 	#define MAX_RETRANSMISSION 3
+#endif
+
 /**
  * Routing Definitions
  */
@@ -110,6 +114,15 @@
 	};
 #endif
 
+#ifndef GROOT_SENSORS_DATA
+	struct GROOT_SENSORS_DATA{
+		uint16_t co2;
+		uint16_t no;
+		uint16_t temp;
+		uint16_t humidity;
+	};
+#endif
+
 #ifndef GROOT_HEADER_PROTOCOL
 	struct GROOT_HEADER_PROTOCOL{
 		uint8_t version;
@@ -120,7 +133,7 @@
 #ifndef GROOT_HEADER
 	struct GROOT_HEADER{
 		struct GROOT_HEADER_PROTOCOL protocol;
-		rimeaddr_t esender;
+		rimeaddr_t end_addr;
 		rimeaddr_t received_from;
 		uint8_t is_cluster_head;
 		uint8_t type;
@@ -189,16 +202,7 @@ void
 groot_intent_rcv();
 
 void
-groot_unsubscribe_rcv();
-
-void
 groot_alternate_snd();
 
 void
 groot_alternate_rcv();
-
-void
-groot_publish_rcv();
-
-void
-groot_publish_snd();

@@ -31,7 +31,7 @@ print_hdr(struct GROOT_HEADER *hdr){
 	printf("HEADER ");
 	PRINT2ADDR(&rimeaddr_node_addr);
 	printf(" - { Source: ");
-	PRINT2ADDR(&hdr->esender);
+	PRINT2ADDR(&hdr->end_addr);
 	printf(" Version: %d MAGIC: %c%c ", hdr->protocol.version, hdr->protocol.magic[0], hdr->protocol.magic[1]);
 	printf("Type: %02x Query ID: %d } \n", hdr->type, hdr->query_id);
 }
@@ -65,14 +65,30 @@ print_qrys(){
 
 /*------------------------------------------------- Other Methods ----------------------------------------------------------*/
 static void
-cb_sampler(void *i){
-	struct GROOT_QUERY_ITEM *qry_itm = (struct GROOT_QUERY_ITEM *)i;
-	printf("CALLBACK FOR: %d \n", qry_itm->query_id);
+random_sensor_readings(struct GROOT_SENSORS *required, struct GROOT_SENSORS_DATA *data){
+	if(required->co2 == 1){
+		data->co2 = 78;
+	} else {
+		data->co2 = 0;
+	}
 
-	
-	
-	ctimer_set(&qry_itm->query_timer, qry_itm->query.sample_rate, cb_sampler, qry_itm);
-	return;
+	if(required->no == 1){
+		data->no = 78;
+	} else {
+		data->no = 0;
+	}
+
+	if(required->temp == 1){
+		data->temp = 15;
+	} else {
+		data->temp = 0;
+	}
+
+	if(required->humidity == 1){
+		data->humidity = 30;
+	} else {
+		data->humidity = 0;
+	}
 }
 
 static void
@@ -130,7 +146,7 @@ packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t q
 	hdr->protocol.magic[1] = 'T';
 	
 	//Main Variables
-	rimeaddr_copy(&hdr->esender, esender);
+	rimeaddr_copy(&hdr->end_addr, esender);
 	rimeaddr_copy(&hdr->received_from, from);
 	hdr->is_cluster_head = 0;
 	hdr->type = type;
@@ -138,10 +154,17 @@ packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t q
 }
 
 static void
-packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry){
+packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, struct GROOT_SENSORS_DATA *sensors_data){
 	int data_l = sizeof(struct GROOT_HEADER);
+	struct GROOT_QUERY *pkt_qry = NULL;
+	struct GROOT_SENSORS_DATA *pkt_data = NULL;
+
 	if(qry != NULL){
 		data_l += sizeof(struct GROOT_QUERY);
+	}
+
+	if(sensors_data != NULL){
+		data_l += sizeof(struct GROOT_SENSORS_DATA);
 	}
 
 	packetbuf_clear();
@@ -149,11 +172,50 @@ packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry){
 	
 	struct GROOT_HEADER *pkt_hdr = packetbuf_dataptr();
 	memcpy(pkt_hdr, hdr, sizeof(struct GROOT_HEADER));
+	
 
 	if(qry != NULL){
-		struct GROOT_QUERY *pkt_qry = (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
+		pkt_qry = (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
 		memcpy(pkt_qry, qry, sizeof(struct GROOT_QUERY));
 	}
+
+	if(sensors_data != NULL){
+		if(qry == NULL){
+			pkt_data = (packetbuf_dataptr()+sizeof(struct GROOT_HEADER));
+		} else {
+			pkt_data = (packetbuf_dataptr()+sizeof(struct GROOT_HEADER)+sizeof(struct GROOT_QUERY));
+		}
+		memcpy(pkt_data, sensors_data, sizeof(struct GROOT_SENSORS_DATA));
+	}
+}
+
+static void
+cb_sampler(void *i){
+	struct GROOT_QUERY_ITEM *qry_itm = (struct GROOT_QUERY_ITEM *)i;
+	struct GROOT_HEADER hdr;
+	struct GROOT_QUERY qry;
+	struct GROOT_SENSORS_DATA sensors_data;
+
+	printf("CALLBACK FOR: %d \n", qry_itm->query_id);
+
+	random_sensor_readings(&qry_itm->query.sensors_required, &sensors_data);
+
+	hdr.protocol.version = GROOT_VERSION;
+	hdr.protocol.magic[0] = 'G';
+	hdr.protocol.magic[1] = 'T';
+	rimeaddr_copy(&hdr.end_addr, &qry_itm->esender);
+	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
+
+	hdr.is_cluster_head = 0;
+	hdr.type = GROOT_PUBLISH_TYPE;
+	hdr.query_id = qry_itm->query_id;
+
+	memcpy(&qry, &qry_itm->query, sizeof(struct GROOT_QUERY));
+	packet_loader_qry(&hdr, &qry, &sensors_data);
+	runicast_send(&glocal.channels->rc, &qry_itm->parent, MAX_RETRANSMISSION);
+
+	ctimer_set(&qry_itm->query_timer, qry_itm->query.sample_rate, cb_sampler, qry_itm);
+	return;
 }
 
 static struct  GROOT_QUERY_ITEM
@@ -169,7 +231,7 @@ static struct  GROOT_QUERY_ITEM
 	list_add(groot_qry_table, new_item);
 
 	new_item->query_id = hdr->query_id;
-	rimeaddr_copy(&new_item->esender, &hdr->esender);
+	rimeaddr_copy(&new_item->esender, &hdr->end_addr);
 	rimeaddr_copy(&new_item->parent, from);
 	rimeaddr_copy(&new_item->parent_bkup, &rimeaddr_null);
 	//Is sender a cluster head?
@@ -237,7 +299,7 @@ groot_subscribe_snd(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSOR
 	packet_qry_creator(&hdr, &qry, query_id, &esender, &received_from, GROOT_SUBSCRIBE_TYPE, sample_rate, data_required, aggregator, 0);
 
 	//Create Query Packet
-	packet_loader_qry(&hdr, &qry);
+	packet_loader_qry(&hdr, &qry, NULL);
 	
 	printf("SENDING!!! \n");
 	//Send packet
@@ -254,13 +316,13 @@ groot_unsubscribe_snd(uint16_t query_id){
 	hdr.protocol.magic[1] = 'T';
 
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
-	rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
+	rimeaddr_copy(&hdr.end_addr, &rimeaddr_node_addr);
 
 	hdr.is_cluster_head = 0;
 	hdr.type = GROOT_UNSUBSCRIBE_TYPE;
 	hdr.query_id = query_id;
 
-	packet_loader_qry(&hdr, NULL);
+	packet_loader_qry(&hdr, NULL, NULL);
 
 	broadcast_send(&glocal.channels->bc);
 	return 1;
@@ -292,7 +354,7 @@ groot_rcv(const rimeaddr_t *from){
 			//Get Query from buffer
 			qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
 			//Already Saved
-			srch_item = find_query(hdr->query_id, &hdr->esender);
+			srch_item = find_query(hdr->query_id, &hdr->end_addr);
 			if(srch_item != NULL){
 				//Set Bkup connection
 				if(rimeaddr_cmp(&srch_item->parent_bkup, &rimeaddr_null) > 0){
@@ -321,7 +383,7 @@ groot_rcv(const rimeaddr_t *from){
 				lst_itm->query.sample_rate, &lst_itm->query.sensors_required, lst_itm->query.aggregator, lst_itm->query.sample_id);
 
 			//Create Query Packet
-			packet_loader_qry(&snd_hdr, &snd_bdy);
+			packet_loader_qry(&snd_hdr, &snd_bdy, NULL);
 			//Send packet
 			printf("SENDING BCAST FROM SENSOR!! - ");
 			PRINT2ADDR(&rimeaddr_node_addr);
@@ -336,7 +398,7 @@ groot_rcv(const rimeaddr_t *from){
 			//Do I have this query?
 			printf("UNSUBSRIBING!! \n");
 
-			lst_itm = find_query(hdr->query_id, &hdr->esender);
+			lst_itm = find_query(hdr->query_id, &hdr->end_addr);
 			//Return if item already deleted or already bcast the unsubscribed
 			if(lst_itm == NULL || lst_itm->unsubscribed != 0){
 				return 0;
@@ -357,6 +419,19 @@ groot_rcv(const rimeaddr_t *from){
 		case GROOT_PUBLISH_TYPE:
 			//Publish Sensed data
 			printf("Im publishing!! \n");
+
+			if(rimeaddr_cmp(&hdr->end_addr, &rimeaddr_node_addr) > 0){
+				printf("RECEIVED DATA SUCCESS!!! \n");
+				return 0;
+			}
+
+			lst_itm = find_query(hdr->query_id, &hdr->end_addr);
+			if(lst_itm == NULL){
+				return;
+			}
+
+			runicast_send(&glocal.channels->rc, &lst_itm->parent ,MAX_RETRANSMISSION);
+
 			break;
 		default:
 			return 0;
@@ -376,26 +451,11 @@ groot_intent_rcv(){
 }
 
 void
-groot_unsubscribe_rcv(){
-
-}
-
-void
 groot_alternate_snd(){
 
 }
 
 void
 groot_alternate_rcv(){
-
-}
-
-void
-groot_publish_rcv(){
-
-}
-
-void
-groot_publish_snd(){
 
 }

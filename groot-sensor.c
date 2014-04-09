@@ -20,7 +20,11 @@ recv_routing(struct broadcast_conn *c, const rimeaddr_t *from){
 
 static void 
 recv_runic(struct runicast_conn *c, const rimeaddr_t *from, uint8_t seqno){
-
+	//Handle new query
+	int is_success = groot_rcv(from);
+	if(!is_success){
+		return;
+	}
 }
 
 static void 
