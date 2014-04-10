@@ -137,6 +137,8 @@
 	struct GROOT_HEADER{
 		struct GROOT_HEADER_PROTOCOL protocol;
 		rimeaddr_t end_addr;
+		rimeaddr_t esender;
+		rimeaddr_t ereceiver;
 		rimeaddr_t received_from;
 		uint8_t is_cluster_head;
 		uint8_t type;

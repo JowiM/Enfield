@@ -16,6 +16,7 @@
  */
 struct GROOT_SENSORS sensor_support = {.co2 = 0, .no = 0, .temp = 0, .humidity = 0};
 static uint16_t query_id = 0;
+static uint8_t numb_clicks = 0;
 //Initialize Process information
 /*---------------------------------------------*/
 PROCESS(enfield_sink, "Enfield Sink");
@@ -24,10 +25,8 @@ AUTOSTART_PROCESSES(&enfield_sink);
 
 PROCESS_THREAD(enfield_sink, ev, data){
 	PROCESS_EXITHANDLER(;)
-
 	PROCESS_BEGIN();
 	
-
 	static uint16_t sample_rate = 13*CLOCK_SECOND;
 	static uint8_t aggregation = GROOT_NO_AGGREGATION;
 	static struct GROOT_SENSORS data_required = {.co2 = 1, .no = 0, .temp = 1, .humidity = 0};
@@ -42,11 +41,20 @@ PROCESS_THREAD(enfield_sink, ev, data){
 
 		PROCESS_WAIT_EVENT_UNTIL(ev == sensors_event &&
 									data == &button_sensor);
-		printf("PRESSED BUTTON!! \n");
-		//Increment Query ID
-		query_id += 1;
-		is_subscribed = sink_subscribe(query_id, sample_rate, &data_required, aggregation);
-		//is_subscribed = sink_unsubscribe(4);
+		numb_clicks += 1;
+		if(numb_clicks == 6){
+			printf("UNSUBSCRIBE CLICK \n");
+			is_subscribed = sink_unsubscribe(4);
+		} else if(numb_clicks == 7){
+			printf("UPDATE QUERY CLICK \n");
+			data_required.no = 1;
+			is_subscribed = sink_send(1, 30*CLOCK_SECOND, &data_required, GROOT_MAX);
+		} else {
+			printf("PRESSED BUTTON!! \n");
+			//Increment Query ID
+			query_id += 1;
+			is_subscribed = sink_subscribe(query_id, sample_rate, &data_required, aggregation);
+		}
 	}
 
 	PROCESS_END();
