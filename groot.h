@@ -28,6 +28,10 @@
 #endif
 
 #ifndef GROOT_CHILD_LIMIT
+ 	#define GROOT_CHILD_LIMIT 5
+#endif
+
+#ifndef GROOT_CHILD_LIMIT
  	#define GROOT_CHILD_LIMIT 3
 #endif
 
@@ -68,8 +72,37 @@
 #ifndef GROOT_ALTERATION_TYPE
  	#define GROOT_ALTERATION_TYPE 0x04
 #endif
+
+#ifndef GROOT_CLUSTER_JOIN_TYPE
+	#define GROOT_CLUSTER_JOIN_TYPE 0x06
+#endif
+
+#ifndef GROOT_CLUSTER_ACCEPTED_TYPE
+ 	#define GROOT_CLUSTER_ACCEPTED_TYPE 0x07
+#endif
+
+#ifndef GROOT_CLUSTER_REJECTED_TYPE
+ 	#define GROOT_CLUSTER_REJECTED_TYPE 0x08
+#endif
+
 #ifndef GROOT_PUBLISH_TYPE
  	#define GROOT_PUBLISH_TYPE 0xC8
+#endif
+
+#ifndef SENSOR_CO2
+ 	#define SENSOR_CO2 0x01
+#endif
+
+#ifndef SENSOR_NO
+ 	#define SENSOR_NO 0x02
+#endif
+
+#ifndef SENSOR_HUMIDITY
+ 	#define SENSOR_HUMIDITY 0x03
+#endif
+
+#ifndef SENSOR_TEMP
+ 	#define SENSOR_TEMP 0x04
 #endif
 
 /**
@@ -89,10 +122,6 @@
 
 #ifndef GROOT_MIN
 	#define GROOT_MIN 0x03
-#endif
-
-#ifndef GROOT_MEDIAN
-	#define GROOT_MEDIAN 0x04
 #endif
 
 /**
@@ -119,10 +148,10 @@
 
 #ifndef GROOT_SENSORS_DATA
 	struct GROOT_SENSORS_DATA{
-		uint16_t co2;
-		uint16_t no;
-		uint16_t temp;
-		uint16_t humidity;
+		int co2;
+		int no;
+		int temp;
+		int humidity;
 	};
 #endif
 
@@ -136,7 +165,6 @@
 #ifndef GROOT_HEADER
 	struct GROOT_HEADER{
 		struct GROOT_HEADER_PROTOCOL protocol;
-		rimeaddr_t end_addr;
 		rimeaddr_t esender;
 		rimeaddr_t ereceiver;
 		rimeaddr_t received_from;
@@ -157,8 +185,10 @@
 
 #ifndef GROOT_SRT_CHILD
 	struct GROOT_SRT_CHILD{
-		rimeaddr_t child;
-		int *next;
+		rimeaddr_t address;
+		unsigned long last_set;
+		struct GROOT_SENSORS_DATA data;
+		struct GROOT_SRT_CHILD *next;
 	};
 #endif
 
@@ -170,16 +200,18 @@
 		rimeaddr_t parent;
 		rimeaddr_t parent_bkup;
 		uint8_t has_cluster_head;
+		uint8_t agg_passes;
 		uint8_t is_serviced;
 		unsigned long unsubscribed;
 		struct ctimer query_timer;
+		struct ctimer maintainer_t;
 		struct GROOT_QUERY query;
+		struct GROOT_SRT_CHILD *children;
 	};
 #endif
 
 #ifndef GROOT_LOCAL
  	struct GROOT_LOCAL{
- 		struct ctimer unsub_ctimer;
  		struct GROOT_SENSORS sensors;
  		struct GROOT_CHANNELS *channels;
  	};

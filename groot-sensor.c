@@ -29,12 +29,12 @@ recv_runic(struct runicast_conn *c, const rimeaddr_t *from, uint8_t seqno){
 
 static void 
 sent_runic(struct runicast_conn *c, const rimeaddr_t *from, uint8_t retransmissions){
-
+	printf("SUCCESS");
 }
 
 static void 
 timedout_runic(struct runicast_conn *c, const rimeaddr_t *from, uint8_t retransmissions){
-
+	printf("TIMEDOUT!! \n");
 }
 
 static const struct broadcast_callbacks sensor_routing_bcast = {recv_routing};
