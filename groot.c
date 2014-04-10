@@ -115,7 +115,7 @@ random_sensor_readings(struct GROOT_SENSORS *required, struct GROOT_SENSORS_DATA
 
 static struct GROOT_SRT_CHILD
 *get_child(struct GROOT_SRT_CHILD *first_child, const rimeaddr_t *address){
-	struct GROOT_SRT_CHILD *tmp_child;
+	struct GROOT_SRT_CHILD *tmp_child = first_child;
 
 	while(tmp_child != NULL){
 		if(rimeaddr_cmp(&tmp_child->address, address)){
