@@ -374,7 +374,7 @@ send_sample(struct GROOT_QUERY_ITEM *qry_itm, struct GROOT_SENSORS_DATA *sensors
 	//rimeaddr_copy(&hdr., &rimeaddr_node_addr);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
 
-	hdr.is_cluster_head = qry_itm->parent_is_cluster;
+	hdr.is_cluster_head = qry_itm->is_serviced;
 	hdr.type = GROOT_PUBLISH_TYPE;
 	hdr.query_id = qry_itm->query_id;
 
@@ -642,7 +642,9 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 			//Add the new qry to the table
 			lst_itm = qry_to_list(hdr, qry_bdy, from);
 			if(lst_itm != NULL){
+				printf("Query Added: %d - is cluster head %d \n", lst_itm->is_serviced, lst_itm->parent_is_cluster);
 				if(lst_itm->is_serviced == 1){
+					printf("SAMPLE \n");
 					//Timer for sampling
 					ctimer_set(&lst_itm->query_timer, qry_bdy->sample_rate+(rand()%(1*CLOCK_SECOND)), cb_sampler, lst_itm);
 				}
@@ -681,7 +683,7 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	print_children(lst_itm->children);*/
 }
 
-/*static int
+static int
 rcv_alterate(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	struct GROOT_QUERY_ITEM *lst_itm = NULL;
 	struct GROOT_QUERY *qry_bdy = NULL;
@@ -714,7 +716,7 @@ rcv_alterate(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 		return 0;
 	}
 	return 1;
-}*/
+}
 
 static int
 rcv_cluster_join(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
@@ -847,19 +849,19 @@ groot_rcv(const rimeaddr_t *from){
 				printf("SUBSCRIBING \n");
 				is_success = rcv_subscribe(hdr, from);
 				break;
-			/*case GROOT_UNSUBSCRIBE_TYPE:
+			case GROOT_UNSUBSCRIBE_TYPE:
 				//Do I have this query?
 				printf("UNSUBSRIBING!! \n");
-				is_success = rcv_unsubscribe(&hdr, from);
+				is_success = rcv_unsubscribe(hdr, from);
 				break;
 			case GROOT_ALTERATION_TYPE:
 				printf("ALTERATION!! \n");
-				is_success = rcv_alterate(&hdr, from);
+				is_success = rcv_alterate(hdr, from);
 				break;
 			case GROOT_CLUSTER_JOIN_TYPE:
 				printf("JOIN CLUSER!! \n");
-				is_success = rcv_cluster_join(&hdr, from);
-				break;*/
+				is_success = rcv_cluster_join(hdr, from);
+				break;
 		}
 	} 
 
