@@ -31,7 +31,7 @@ print_hdr(struct GROOT_HEADER *hdr){
 	printf("HEADER ");
 	PRINT2ADDR(&rimeaddr_node_addr);
 	printf(" - { Source: ");
-	PRINT2ADDR(&hdr->esender);
+	PRINT2ADDR(&hdr->ereceiver);
 	printf(" Destination: ");
 	PRINT2ADDR(&hdr->ereceiver);
 	printf(" Version: %d MAGIC: %c%c ", hdr->protocol.version, hdr->protocol.magic[0], hdr->protocol.magic[1]);
@@ -61,7 +61,7 @@ print_qrys(){
 	while(qry_itm != NULL){
 		printf(" QUERY ITEM - [ ");
 		printf(" QUERY ID: %d ESENDER: ", qry_itm->query_id);
-		PRINT2ADDR(&qry_itm->esender);
+		PRINT2ADDR(&qry_itm->ereceiver);
 		printf(" Parent: ");
 		PRINT2ADDR(&qry_itm->parent);
 		printf(" ] \n");
@@ -232,7 +232,7 @@ is_capable(struct GROOT_SENSORS *qry_sensors){
 }
 
 static void
-packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t query_id, const rimeaddr_t *esender, 
+packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t query_id,
 	const rimeaddr_t *ereceiver, const rimeaddr_t *from, uint8_t type, uint16_t sample_rate, 
 	struct GROOT_SENSORS *data_required, uint8_t aggregator, uint8_t is_cluster_head, uint16_t sample_id){
 
@@ -248,8 +248,8 @@ packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t q
 	hdr->protocol.magic[1] = 'T';
 	
 	//Main Variables
-	rimeaddr_copy(&hdr->esender, esender);
 	rimeaddr_copy(&hdr->ereceiver, ereceiver);
+	//rimeaddr_copy(&hdr->ereceiver, ereceiver);
 	rimeaddr_copy(&hdr->received_from, from);
 	if(is_capable(data_required) == 0){
 		hdr->is_cluster_head = 0;
@@ -370,8 +370,8 @@ send_sample(struct GROOT_QUERY_ITEM *qry_itm, struct GROOT_SENSORS_DATA *sensors
 	hdr.protocol.magic[0] = 'G';
 	hdr.protocol.magic[1] = 'T';
 	rimeaddr_copy(&hdr.to, &qry_itm->parent);
-	rimeaddr_copy(&hdr.ereceiver, &qry_itm->esender);
-	rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
+	rimeaddr_copy(&hdr.ereceiver, &qry_itm->ereceiver);
+	//rimeaddr_copy(&hdr., &rimeaddr_node_addr);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
 
 	hdr.is_cluster_head = qry_itm->parent_is_cluster;
@@ -466,8 +466,8 @@ cluster_join_send(void *lst_item){
 	hdr.protocol.magic[1] = 'T';
 
 	rimeaddr_copy(&hdr.to, &rimeaddr_null);
-	rimeaddr_copy(&hdr.esender, &itm->esender);
-	rimeaddr_copy(&hdr.ereceiver, &rimeaddr_null);
+	//rimeaddr_copy(&hdr.esender, &itm->esender);
+	rimeaddr_copy(&hdr.ereceiver, &itm->ereceiver);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
 
 	hdr.is_cluster_head = 1;
@@ -491,7 +491,7 @@ static struct  GROOT_QUERY_ITEM
 	list_add(groot_qry_table, new_item);
 
 	new_item->query_id = hdr->query_id;
-	rimeaddr_copy(&new_item->esender, &hdr->esender);
+	rimeaddr_copy(&new_item->ereceiver, &hdr->ereceiver);
 	rimeaddr_copy(&new_item->parent, from);
 	new_item->parent_is_cluster = hdr->is_cluster_head;
 	rimeaddr_copy(&new_item->parent_bkup, &rimeaddr_null);
@@ -508,7 +508,7 @@ static struct  GROOT_QUERY_ITEM
 }
 
 static struct GROOT_QUERY_ITEM
-*find_query(uint16_t query_id, const rimeaddr_t *esender){
+*find_query(uint16_t query_id, const rimeaddr_t *ereceiver){
 	struct GROOT_QUERY_ITEM *i;
 	//If empty return
 	if(list_length(groot_qry_table) == 0){
@@ -517,7 +517,7 @@ static struct GROOT_QUERY_ITEM
 	//Get top of head a pass through all queries to find query
 	i = list_head(groot_qry_table);
 	while(i != NULL){
-		if(i->query_id == query_id && rimeaddr_cmp(&i->esender, esender)){
+		if(i->query_id == query_id && rimeaddr_cmp(&i->ereceiver, ereceiver)){
 			return i;
 		}
 		i = i->next;
@@ -534,7 +534,7 @@ rcv_subscribe(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	struct GROOT_HEADER snd_hdr;
 	
 	//Already Saved
-	lst_itm = find_query(hdr->query_id, &hdr->esender);
+	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	if(lst_itm != NULL){
 		printf("QUERY ALREADY SAVED! \n");
 		//Set Bkup connection if NULL
@@ -554,7 +554,7 @@ rcv_subscribe(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 		return 0;
 	}
 	//Re-Broadcast Query so next neighbours can see it.
-	packet_qry_creator(&snd_hdr, &snd_bdy, lst_itm->query_id, &lst_itm->esender, &rimeaddr_null, from, GROOT_SUBSCRIBE_TYPE,
+	packet_qry_creator(&snd_hdr, &snd_bdy, lst_itm->query_id, &lst_itm->ereceiver, from, GROOT_SUBSCRIBE_TYPE,
 		lst_itm->query.sample_rate, &lst_itm->query.sensors_required, lst_itm->query.aggregator, lst_itm->is_serviced, lst_itm->query.sample_id);
 
 	//Create Query Packet
@@ -583,7 +583,7 @@ static int
 rcv_unsubscribe(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	struct GROOT_QUERY_ITEM *lst_itm = NULL;
 
-	lst_itm = find_query(hdr->query_id, &hdr->esender);
+	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	//Return if item already deleted or already bcast the unsubscribed
 	if(lst_itm == NULL || lst_itm->unsubscribed != 0){
 		return 0;
@@ -611,6 +611,11 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	struct GROOT_SRT_CHILD *child = NULL;
 	struct GROOT_QUERY *qry_bdy = NULL;
 	
+	printf("COMPARE EREC - ");
+	PRINT2ADDR(&hdr->ereceiver);
+	printf(" - ");
+	PRINT2ADDR(&rimeaddr_node_addr);
+	printf(" is equal: %d \n", rimeaddr_cmp(&hdr->ereceiver, &rimeaddr_node_addr));	
 	if(rimeaddr_cmp(&hdr->ereceiver, &rimeaddr_node_addr) > 0){
 		printf("RECEIVED DATA SUCCESS!!! \n");
 		print_hdr((struct GROOT_HEADER*)packetbuf_dataptr());
@@ -625,30 +630,32 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 
 	PRINT2ADDR(&hdr->to);
 	printf(" <--to PUBLISH \n");
-/*
+
 	//Not for me!
 	//@todo please clean this code :'(. Its ugly as hell!!
 	//@todo if null still send if query exists
 	if(rimeaddr_cmp(&hdr->to, &rimeaddr_node_addr) == 0){
-		printf("NOT FOR ME!! \n");
-		PRINT2ADDR(&rimeaddr_node_addr);
 		//Check if I have query. If not add!
-		if(find_query(hdr->query_id, &hdr->esender) == NULL){
-			printf("I do not own the query!! Adding \n");
+		if(find_query(hdr->query_id, &hdr->ereceiver) == NULL){
 			//Get Query from buffer
-			qry_bdy = (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
+			qry_bdy = packetbuf_get_qry();
 			//Add the new qry to the table
 			lst_itm = qry_to_list(hdr, qry_bdy, from);
-			if(lst_itm != NULL && lst_itm->is_serviced == 1){
-				printf("Join in! \n");
-				//Timer for sampling
-				ctimer_set(&lst_itm->query_timer, qry_bdy->sample_rate+(rand()%(1*CLOCK_SECOND)), cb_sampler, lst_itm);
-				ctimer_set(&lst_itm->maintainer_t, (rand()%(1*CLOCK_SECOND)), cluster_join_send, lst_itm);	
+			if(lst_itm != NULL){
+				if(lst_itm->is_serviced == 1){
+					//Timer for sampling
+					ctimer_set(&lst_itm->query_timer, qry_bdy->sample_rate+(rand()%(1*CLOCK_SECOND)), cb_sampler, lst_itm);
+				}
+
+				if(lst_itm->parent_is_cluster == 1){
+					printf("ASK TO JOIN!! \n");
+					ctimer_set(&lst_itm->maintainer_t, (rand()%(1*CLOCK_SECOND)), cluster_join_send, lst_itm);	
+				}
 			}
 		}
 		return 0;
 	}
-
+/*
 	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	if(lst_itm == NULL){
 		return 0;
@@ -685,7 +692,7 @@ rcv_alterate(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	rimeaddr_copy(&hdr->received_from, from);
 
 	//Already Saved
-	lst_itm = find_query(hdr->query_id, &hdr->esender);
+	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	if(lst_itm == NULL){
 		//Add the new qry to the table
 		lst_itm = qry_to_list(hdr, qry_bdy, from);
@@ -715,7 +722,7 @@ rcv_cluster_join(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	struct GROOT_SRT_CHILD *child;
 	printf("RECEIVED JOIN REQ! \n");
 
-	lst_itm = find_query(hdr->query_id, &hdr->esender);
+	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	//Item not in table or cannot accept more children
 	if(lst_itm == NULL || 
 		(child_length(lst_itm->children) >= GROOT_CHILD_LIMIT)){
@@ -768,8 +775,8 @@ groot_qry_snd(uint16_t query_id, uint8_t type, uint16_t sample_rate, struct GROO
 	hdr.protocol.magic[1] = 'T';
 	
 	//Main Variables
-	rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
-	rimeaddr_copy(&hdr.ereceiver, &rimeaddr_null);
+	//rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
+	rimeaddr_copy(&hdr.ereceiver, &rimeaddr_node_addr);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
 	hdr.is_cluster_head = 0;
 	hdr.type = GROOT_SUBSCRIBE_TYPE;
@@ -798,8 +805,8 @@ groot_unsubscribe_snd(uint16_t query_id){
 
 	rimeaddr_copy(&hdr.to, &rimeaddr_null);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
-	rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
-	rimeaddr_copy(&hdr.ereceiver, &rimeaddr_null);
+	//rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
+	rimeaddr_copy(&hdr.ereceiver, &rimeaddr_node_addr);
 
 	hdr.is_cluster_head = 0;
 	hdr.type = GROOT_UNSUBSCRIBE_TYPE;
@@ -821,7 +828,6 @@ groot_rcv(const rimeaddr_t *from){
 	hdr = (struct GROOT_HEADER*) packetbuf_dataptr();
 
 	//I just sent this packet ignore
-	printf("RECEIVED PKT - %02x \n", hdr->type);
 	if(rimeaddr_cmp(&hdr->received_from, &rimeaddr_node_addr) == 1){
 		return is_success;
 	}

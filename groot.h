@@ -167,7 +167,7 @@
 		struct GROOT_HEADER_PROTOCOL protocol;
 		rimeaddr_t to;
 		uint8_t is_cluster_head;
-		rimeaddr_t esender;
+		//rimeaddr_t esender;
 		uint8_t type;
 		rimeaddr_t ereceiver;
 		uint16_t query_id;
@@ -197,7 +197,7 @@
 	struct GROOT_QUERY_ITEM{
 		struct GROOT_QUERY_ITEM *next;
 		uint16_t query_id;
-		rimeaddr_t esender;
+		rimeaddr_t ereceiver;
 		rimeaddr_t parent;
 		uint8_t parent_is_cluster;
 		rimeaddr_t parent_bkup;
