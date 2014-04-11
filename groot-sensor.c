@@ -8,7 +8,6 @@ struct GROOT_CHANNELS sensor_chan;
 static void
 recv_routing(struct broadcast_conn *c, const rimeaddr_t *from){
 	printf("Recevied Query!!");
-
 	//Handle new query
 	int is_success = groot_rcv(from);
 	if(!is_success){
@@ -52,7 +51,7 @@ void sensor_bootstrap(struct GROOT_SENSORS *support){
 	runicast_open(&sensor_chan.rc, GROOT_DATA_CHANNEL, &sensor_data_rcast);
 	
 	//Initialize protocol library
-	groot_prot_init(support, &sensor_chan);
+	groot_prot_init(support, &sensor_chan, 0);
 
 	//@todo check if any neighbours has any queries good for me!!
 }

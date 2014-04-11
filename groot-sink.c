@@ -9,6 +9,11 @@ static struct GROOT_CHANNELS sink_chan;
 static void
 recv_routing(struct broadcast_conn *c, const rimeaddr_t *from){
 	printf("Received Published data!!");
+	//Handle new query
+	int is_success = groot_rcv(from);
+	if(!is_success){
+		return;
+	}
 }
 
 static void 
@@ -45,7 +50,7 @@ sink_bootstrap(struct GROOT_SENSORS *supported_sensors){
 	broadcast_open(&sink_chan.bc, GROOT_ROUTING_CHANNEL, &sink_routing_bcast);
 	runicast_open(&sink_chan.rc, GROOT_DATA_CHANNEL, &sink_data_rcast);
 	//Initialize protocol library
-	groot_prot_init(supported_sensors, &sink_chan);
+	groot_prot_init(supported_sensors, &sink_chan, 1);
 }
 
 void

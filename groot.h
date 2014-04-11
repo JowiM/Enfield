@@ -165,12 +165,13 @@
 #ifndef GROOT_HEADER
 	struct GROOT_HEADER{
 		struct GROOT_HEADER_PROTOCOL protocol;
-		rimeaddr_t esender;
-		rimeaddr_t ereceiver;
-		rimeaddr_t received_from;
+		rimeaddr_t to;
 		uint8_t is_cluster_head;
+		rimeaddr_t esender;
 		uint8_t type;
+		rimeaddr_t ereceiver;
 		uint16_t query_id;
+		rimeaddr_t received_from;
 	};
 #endif
 
@@ -198,8 +199,8 @@
 		uint16_t query_id;
 		rimeaddr_t esender;
 		rimeaddr_t parent;
+		uint8_t parent_is_cluster;
 		rimeaddr_t parent_bkup;
-		uint8_t has_cluster_head;
 		uint8_t agg_passes;
 		uint8_t is_serviced;
 		unsigned long unsubscribed;
@@ -214,6 +215,7 @@
  	struct GROOT_LOCAL{
  		struct GROOT_SENSORS sensors;
  		struct GROOT_CHANNELS *channels;
+ 		uint8_t is_sink;
  	};
 #endif
 
@@ -221,7 +223,7 @@
  * Method Definitions
  */
 void
-groot_prot_init(struct GROOT_SENSORS *sensors, struct GROOT_CHANNELS *channels);
+groot_prot_init(struct GROOT_SENSORS *sensors, struct GROOT_CHANNELS *channels, uint8_t is_sink);
 
 int
 groot_qry_snd(uint16_t query_id, uint8_t type, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator);
@@ -231,9 +233,3 @@ groot_rcv(const rimeaddr_t *from);
 
 int
 groot_unsubscribe_snd(uint16_t query_id);
-
-void
-groot_intent_snd();
-
-void
-groot_intent_rcv();
