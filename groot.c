@@ -9,7 +9,9 @@
 
 LIST(groot_qry_table);
 MEMB(groot_qrys, struct GROOT_QUERY_ITEM, GROOT_QUERY_LIMIT);
-MEMB(groot_children, struct GROOT_SRT_CHILD, GROOT_QUERY_LIMIT*GROOT_CHILD_LIMIT);
+MEMB(groot_children, struct GROOT_SRT_CHILD, GROOT_QUERY_LIMIT*(GROOT_CHILD_LIMIT+1));
+
+static void cb_publish_aggregate(void *i);
 
 static struct GROOT_LOCAL glocal;
 /*------------------------------------------------- Debug Methods -------------------------------------------------------*/
@@ -50,7 +52,7 @@ static void
 print_data(struct GROOT_SENSORS_DATA *data){
 	printf("DATA ");
 	PRINT2ADDR(&rimeaddr_node_addr);
-	printf(" - { CO2 %d NO - %d TEMP - %d HUMIDITY - %d } \n", data->co2, data->no, data->temp, data->humidity);
+	printf(" - { CO2 %.2f NO - %.2f TEMP - %.2f HUMIDITY - %.2f } \n", data->co2, data->no, data->temp, data->humidity);
 }
 
 static void
@@ -85,19 +87,6 @@ print_children(struct GROOT_SRT_CHILD *first_child){
 
 /*------------------------------------------------- Other Methods ----------------------------------------------------------*/
 static void
-cpy_hdr(struct GROOT_HEADER *target, struct GROOT_HEADER *src){
-	memcpy(&target->protocol, &src->protocol, sizeof(struct GROOT_HEADER*));
-	rimeaddr_copy(&target->to, &src->to);
-	rimeaddr_copy(&target->ereceiver, &src->ereceiver);
-	rimeaddr_copy(&target->received_from, &src->received_from);
-	target->is_cluster_head = src->is_cluster_head;
-	target->type = src->type;
-	target->query_id = src->query_id;
-
-	print_raw_packetbuf();
-}
-
-static void
 copy_qry(struct GROOT_QUERY *target, struct GROOT_QUERY *src){
 	target->sample_id = src->sample_id;
 	target->sample_rate = src->sample_rate;
@@ -108,6 +97,11 @@ copy_qry(struct GROOT_QUERY *target, struct GROOT_QUERY *src){
 static struct GROOT_QUERY
 *packetbuf_get_qry(){
 	return (struct GROOT_QUERY*) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER));
+}
+
+static struct GROOT_SENSORS_DATA
+*packetbuf_get_sensor_data(){
+	return (struct GROOT_SENSORS_DATA *) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER) + sizeof(struct GROOT_QUERY));
 }
 
 static void
@@ -145,7 +139,6 @@ static struct GROOT_SRT_CHILD
 		if(rimeaddr_cmp(&tmp_child->address, address)){
 			return tmp_child;
 		}
-
 		tmp_child = tmp_child->next;
 	}
 
@@ -190,8 +183,37 @@ static struct GROOT_SRT_CHILD
 	return new_child;
 }
 
-rm_child(){
+static void
+rm_child(struct GROOT_QUERY_ITEM *list, struct GROOT_SRT_CHILD *child){
+struct GROOT_SRT_CHILD *prev_child = NULL, *tmp_child = NULL;
+	uint8_t isFound = 0;
 
+	tmp_child = list->children;
+	while(tmp_child != NULL){
+		if(tmp_child != child){
+			prev_child = tmp_child;
+			tmp_child = tmp_child->next;
+			continue;
+		}
+
+		//If root child update list
+		if(prev_child == NULL){
+			printf("ROOT!! \n");
+			list->children = child->next;
+		} else { // update previous
+			printf("OTHER \n");
+			prev_child->next = tmp_child->next;
+		}
+		isFound = 1;
+		prev_child = tmp_child;
+		tmp_child = tmp_child->next;
+	}
+	
+	if(isFound == 1){
+		printf("IS FOUND!! \n");
+		memb_free(&groot_children, child);
+		memset(child, ' ', sizeof(struct GROOT_QUERY_ITEM));
+	}
 }
 
 static void
@@ -297,7 +319,7 @@ packet_loader_qry(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, struct GROO
 	}
 }
 
-static int
+static float
 get_sensor_data(uint8_t sensor, struct GROOT_SENSORS_DATA *data){
 	int saved = 0;
 	switch(sensor){
@@ -318,16 +340,19 @@ get_sensor_data(uint8_t sensor, struct GROOT_SENSORS_DATA *data){
 	return saved;
 }
 
-static int
+static float
 aggregate_calc(struct GROOT_SRT_CHILD *children, uint8_t sensor, uint8_t aggregator){
 	struct GROOT_SRT_CHILD *tmp_child;
-	uint16_t result, tmp_data, tmp_result, count = 0;
+	float result = 0, tmp_data = 0, tmp_result = 0, count = 0;
 
 	switch(aggregator){
 		case GROOT_MAX:
 			tmp_child = children;
 			while(tmp_child != NULL){
-				tmp_data = get_sensor_data(sensor, &tmp_child->data);	
+				if(&tmp_child->data <= 0){
+					continue;
+				}
+				tmp_data = get_sensor_data(sensor, &tmp_child->data);
 				if(tmp_result < tmp_data){
 					tmp_result = tmp_data;
 				}
@@ -338,6 +363,9 @@ aggregate_calc(struct GROOT_SRT_CHILD *children, uint8_t sensor, uint8_t aggrega
 		case GROOT_AVG:
 			tmp_child = children;
 			while(tmp_child != NULL){
+				if(&tmp_child->data <= 0){
+					continue;
+				}
 				tmp_result += get_sensor_data(sensor, &tmp_child->data);
 				count += 1;
 				tmp_child = tmp_child->next;
@@ -347,6 +375,9 @@ aggregate_calc(struct GROOT_SRT_CHILD *children, uint8_t sensor, uint8_t aggrega
 		case GROOT_MIN:
 			tmp_child = children;
 			while(tmp_child != NULL){
+				if(&tmp_child->data <= 0){
+					continue;
+				}
 				tmp_data = get_sensor_data(sensor, &tmp_child->data);
 				if(tmp_result > tmp_data){
 					tmp_result = tmp_data;
@@ -356,7 +387,6 @@ aggregate_calc(struct GROOT_SRT_CHILD *children, uint8_t sensor, uint8_t aggrega
 			}
 			break;
 	}
-
 	return result;
 }
 
@@ -380,37 +410,73 @@ send_sample(struct GROOT_QUERY_ITEM *qry_itm, struct GROOT_SENSORS_DATA *sensors
 
 	//Increment Sample Id
 	qry_itm->query.sample_id += 1;
-	memcpy(&qry, &qry_itm->query, sizeof(struct GROOT_QUERY));
-	
-	PRINT2ADDR(&rimeaddr_node_addr);
-	printf("- { SENDING SAMPLE %d - QID - %d }\n", qry.sample_id, qry_itm->query_id);
+	copy_qry(&qry, &qry_itm->query);
 
+	PRINT2ADDR(&rimeaddr_node_addr);
+	printf("- { SENDING SAMPLE %d - QID - %d } ", qry.sample_id, qry_itm->query_id);
+	printf("- [ CO2 - %.2f NO - %.2f TEMP - %.2f HUMIDITY - %.2f ] \n", sensors_data->co2, 
+			sensors_data->no, sensors_data->temp, sensors_data->humidity);
+
+	qry_itm->last_published = clock_seconds();
 	packet_loader_qry(&hdr, &qry, sensors_data);
 	broadcast_send(&glocal.channels->bc);
+}
+
+static uint8_t
+can_send_aggregate(struct GROOT_QUERY_ITEM *qry_itm){
+	struct GROOT_SRT_CHILD *tmp_child = qry_itm->children;
+	struct GROOT_SRT_CHILD *nxt_child;
+	int lst_time;
+
+	while(tmp_child != NULL){
+
+		if(qry_itm->last_published != 0){
+			//Passed through 3 times without setting. Node is dead!
+		 	lst_time = clock_seconds()-(((qry_itm->query.sample_rate/CLOCK_SECOND) + 2) * 3);
+		 	printf("LAST TIME: %d - last set - %d", lst_time, tmp_child->last_set);
+			if(lst_time > 0 && tmp_child->last_set <= lst_time){
+				printf("REMOVING CHILD!! \n");
+				nxt_child = tmp_child->next;
+				rm_child(qry_itm, tmp_child);
+				print_children(qry_itm->children);
+				printf("REMOVED!! \n");
+				tmp_child = nxt_child;
+				continue;
+			}
+		}
+
+		printf("LAST SET: %d - LAST PUBLISHED %d \n", tmp_child->last_set, qry_itm->last_published);
+		if((tmp_child->last_set <= qry_itm->last_published && qry_itm->agg_passes < 3) && 
+			ctimer_expired(&qry_itm->maintainer_t)){
+
+			//Increment Passes
+			qry_itm->agg_passes += 1;
+			printf("AGG PASSES: %d \n", qry_itm->agg_passes);
+			ctimer_set(&qry_itm->maintainer_t, (rand()%(1*CLOCK_SECOND)), cb_publish_aggregate, qry_itm);
+			return 0;
+		}
+
+		tmp_child = tmp_child->next;
+	}
+
+	return 1;
 }
 
 static void
 cb_publish_aggregate(void *i){
 	struct GROOT_QUERY_ITEM *lst_itm = (struct GROOT_QUERY_ITEM *)i;
-	struct GROOT_SRT_CHILD *tmp_child = lst_itm->children;
 	struct GROOT_SENSORS_DATA data;
 	struct GROOT_SENSORS *req = NULL;
 
-	while(tmp_child != NULL){
-		if(tmp_child->last_set <= clock_seconds()-(lst_itm->query.sample_rate+2) &&
-			lst_itm->agg_passes < 3 && ctimer_expired(&lst_itm->maintainer_t))
-		{
-			//Increment Passes
-			lst_itm->agg_passes += 1;
-			ctimer_set(&lst_itm->maintainer_t, (rand()%(1*CLOCK_SECOND)), cb_publish_aggregate, lst_itm);
-			return;
-		}
-		tmp_child = tmp_child->next;
+	if(can_send_aggregate(lst_itm) == 0){
+		printf("CANNOT SEND!! \n");
+		return;
 	}
 	
 	//Sending so aggregation pass is done!
 	lst_itm->agg_passes = 0;
 	req = &lst_itm->query.sensors_required;
+
 	if(req->co2 == 1){
 		data.co2 = aggregate_calc(lst_itm->children, SENSOR_CO2, lst_itm->query.aggregator);
 	}
@@ -426,14 +492,29 @@ cb_publish_aggregate(void *i){
 	if(req->humidity == 1){
 		data.humidity = aggregate_calc(lst_itm->children, SENSOR_HUMIDITY, lst_itm->query.aggregator);
 	}
+	
+	printf("\n");
+	printf("AGGREAGATED DATA \n");
+	print_data(&data);
+	printf("\n");
+
 	//Send the data
 	send_sample(lst_itm, &data);
 }
 
+/**
+ * @brief Call back called to periodically set/send sample
+ * @details Call back called according to the sample rate. 
+ *          If no Aggregation is given send the data if aggregation save data as child.
+ *          This method also triggers the send aggregation.
+ * 
+ * @param i Query Item that sample needs
+ */
 static void
 cb_sampler(void *i){
 	struct GROOT_QUERY_ITEM *qry_itm = (struct GROOT_QUERY_ITEM *)i;
 	struct GROOT_SENSORS_DATA sensors_data;
+	struct GROOT_SRT_CHILD *child;
 
 	//Get Sensor readings - in this case random numbers due to the use of a simulator
 	random_sensor_readings(&qry_itm->query.sensors_required, &sensors_data);
@@ -442,7 +523,13 @@ cb_sampler(void *i){
 	if(qry_itm->query.aggregator == GROOT_NO_AGGREGATION){
 		send_sample(qry_itm, &sensors_data);
 	} else {
-		//@todo where do I store this data???
+		child = get_child(qry_itm->children, &rimeaddr_node_addr);
+		if(child != NULL){
+			memcpy(&child->data, &sensors_data, sizeof(struct GROOT_SENSORS_DATA));
+			print_data(&child->data);
+			child->last_set = clock_seconds();
+		}
+
 		////Initialize ctimer to check if all children arrived or check with every sample
 		if(ctimer_expired(&qry_itm->maintainer_t)){
 			ctimer_set(&qry_itm->maintainer_t, (rand()%(1*CLOCK_SECOND)), cb_publish_aggregate, qry_itm);
@@ -466,7 +553,6 @@ cluster_join_send(void *lst_item){
 	hdr.protocol.magic[1] = 'T';
 
 	rimeaddr_copy(&hdr.to, &rimeaddr_null);
-	//rimeaddr_copy(&hdr.esender, &itm->esender);
 	rimeaddr_copy(&hdr.ereceiver, &itm->ereceiver);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
 
@@ -481,6 +567,7 @@ cluster_join_send(void *lst_item){
 static struct  GROOT_QUERY_ITEM
 *qry_to_list(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry_bdy, const rimeaddr_t *from){
 	struct GROOT_QUERY_ITEM *new_item;
+	struct GROOT_SRT_CHILD *new_child;
 	
 	//LIST and all MEMORY USED
 	if(list_length(groot_qry_table) >= GROOT_QUERY_LIMIT){
@@ -494,15 +581,23 @@ static struct  GROOT_QUERY_ITEM
 	rimeaddr_copy(&new_item->ereceiver, &hdr->ereceiver);
 	rimeaddr_copy(&new_item->parent, from);
 	new_item->parent_is_cluster = hdr->is_cluster_head;
-	rimeaddr_copy(&new_item->parent_bkup, &rimeaddr_null);
 	//Check that I have all the sensors needed
 	new_item->is_serviced = is_capable(&qry_bdy->sensors_required);
 	//When unsubscribe received set this time
 	new_item->unsubscribed = 0;
+	new_item->last_published = 0;
 	//Copy Query Values into row
 	copy_qry(&new_item->query, qry_bdy);
 	
 	new_item->children = NULL;
+
+	//Add node as child to keep data in it
+	new_child = memb_alloc(&groot_children);
+	rimeaddr_copy(&new_child->address, &rimeaddr_node_addr);
+	new_child->last_set = 0;
+	new_child->next = NULL;
+	new_item->children = new_child;
+	
 	print_qrys();
 	return new_item;
 }
@@ -537,10 +632,6 @@ rcv_subscribe(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	if(lst_itm != NULL){
 		printf("QUERY ALREADY SAVED! \n");
-		//Set Bkup connection if NULL
-		if(rimeaddr_cmp(&lst_itm->parent_bkup, &rimeaddr_null) > 0){
-			rimeaddr_copy(&lst_itm->parent_bkup, from);
-		}
 		return 0;
 	}
 
@@ -611,11 +702,6 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	struct GROOT_SRT_CHILD *child = NULL;
 	struct GROOT_QUERY *qry_bdy = NULL;
 	
-	printf("COMPARE EREC - ");
-	PRINT2ADDR(&hdr->ereceiver);
-	printf(" - ");
-	PRINT2ADDR(&rimeaddr_node_addr);
-	printf(" is equal: %d \n", rimeaddr_cmp(&hdr->ereceiver, &rimeaddr_node_addr));	
 	if(rimeaddr_cmp(&hdr->ereceiver, &rimeaddr_node_addr) > 0){
 		printf("RECEIVED DATA SUCCESS!!! \n");
 		print_hdr((struct GROOT_HEADER*)packetbuf_dataptr());
@@ -628,12 +714,7 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 		return 0;
 	}
 
-	PRINT2ADDR(&hdr->to);
-	printf(" <--to PUBLISH \n");
-
 	//Not for me!
-	//@todo please clean this code :'(. Its ugly as hell!!
-	//@todo if null still send if query exists
 	if(rimeaddr_cmp(&hdr->to, &rimeaddr_node_addr) == 0){
 		//Check if I have query. If not add!
 		if(find_query(hdr->query_id, &hdr->ereceiver) == NULL){
@@ -642,45 +723,44 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 			//Add the new qry to the table
 			lst_itm = qry_to_list(hdr, qry_bdy, from);
 			if(lst_itm != NULL){
-				printf("Query Added: %d - is cluster head %d \n", lst_itm->is_serviced, lst_itm->parent_is_cluster);
 				if(lst_itm->is_serviced == 1){
-					printf("SAMPLE \n");
 					//Timer for sampling
 					ctimer_set(&lst_itm->query_timer, qry_bdy->sample_rate+(rand()%(1*CLOCK_SECOND)), cb_sampler, lst_itm);
 				}
 
 				if(lst_itm->parent_is_cluster == 1){
-					printf("ASK TO JOIN!! \n");
 					ctimer_set(&lst_itm->maintainer_t, (rand()%(1*CLOCK_SECOND)), cluster_join_send, lst_itm);	
 				}
 			}
 		}
 		return 0;
 	}
-/*
+
 	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	if(lst_itm == NULL){
 		return 0;
 	}
 
+	//Does not have aggregation just send
 	if(lst_itm->query.aggregator == GROOT_NO_AGGREGATION){
 		rimeaddr_copy(&hdr->to, &lst_itm->parent);
 		broadcast_send(&glocal.channels->bc);
 	}
 
-	sns_data = (struct GROOT_SENSORS_DATA *) (packetbuf_dataptr() + sizeof(struct GROOT_HEADER) + sizeof(struct GROOT_QUERY));
-	child = get_child(lst_itm->children, &hdr->ereceiver);
+	//Is aggretated store data locally until all data has arrived
+	sns_data = packetbuf_get_sensor_data();
+	
+	PRINT2ADDR(&rimeaddr_node_addr);
+	printf(" Sensor Data - ");
+	print_data(sns_data);
+
+	child = get_child(lst_itm->children, from);
 	if(child != NULL){
 		memcpy(&child->data, sns_data, sizeof(struct GROOT_SENSORS_DATA));
 		child->last_set = clock_seconds();
 	}
 
-	//@todo DELETE
-	print_data(sns_data);
-	printf("RE-PUBLISHING - ");
-	PRINT2ADDR(&rimeaddr_node_addr);
-	printf("\n");
-	print_children(lst_itm->children);*/
+	print_children(lst_itm->children);
 }
 
 static int
@@ -701,7 +781,7 @@ rcv_alterate(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	} else {
 		//Update Query details
 		memcpy(&lst_itm->query.sensors_required, &qry_bdy->sensors_required, sizeof(struct GROOT_SENSORS));
-		lst_itm->query.sample_id = qry_bdy->sample_id;
+		//lst_itm->query.sample_id = qry_bdy->sample_id;
 		lst_itm->query.sample_rate = qry_bdy->sample_rate;
 		lst_itm->query.aggregator = qry_bdy->aggregator;
 		lst_itm->is_serviced = is_capable(&lst_itm->query.sensors_required);
@@ -722,7 +802,6 @@ static int
 rcv_cluster_join(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	struct GROOT_QUERY_ITEM *lst_itm = NULL;
 	struct GROOT_SRT_CHILD *child;
-	printf("RECEIVED JOIN REQ! \n");
 
 	lst_itm = find_query(hdr->query_id, &hdr->ereceiver);
 	//Item not in table or cannot accept more children
@@ -765,7 +844,6 @@ groot_qry_snd(uint16_t query_id, uint8_t type, uint16_t sample_rate, struct GROO
 	struct GROOT_HEADER hdr;
 	struct GROOT_QUERY qry;
 
-	printf("SUBSRUBE SEND CALLING CREATOR: \n");
 	qry.sample_id = 0;
 	qry.sample_rate = sample_rate;
 	qry.aggregator = aggregator;
@@ -777,7 +855,6 @@ groot_qry_snd(uint16_t query_id, uint8_t type, uint16_t sample_rate, struct GROO
 	hdr.protocol.magic[1] = 'T';
 	
 	//Main Variables
-	//rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
 	rimeaddr_copy(&hdr.ereceiver, &rimeaddr_node_addr);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
 	hdr.is_cluster_head = 0;
@@ -807,7 +884,6 @@ groot_unsubscribe_snd(uint16_t query_id){
 
 	rimeaddr_copy(&hdr.to, &rimeaddr_null);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
-	//rimeaddr_copy(&hdr.esender, &rimeaddr_node_addr);
 	rimeaddr_copy(&hdr.ereceiver, &rimeaddr_node_addr);
 
 	hdr.is_cluster_head = 0;
@@ -843,7 +919,6 @@ groot_rcv(const rimeaddr_t *from){
 	printf("- { RECEIVED - %02x }\n", hdr->type);
 
 	if(glocal.is_sink == 0){
-		printf("IS NOT SINK!!");
 		switch(hdr->type){
 			case GROOT_SUBSCRIBE_TYPE:
 				printf("SUBSCRIBING \n");

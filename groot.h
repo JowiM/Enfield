@@ -148,10 +148,10 @@
 
 #ifndef GROOT_SENSORS_DATA
 	struct GROOT_SENSORS_DATA{
-		int co2;
-		int no;
-		int temp;
-		int humidity;
+		float co2;
+		float no;
+		float temp;
+		float humidity;
 	};
 #endif
 
@@ -167,7 +167,6 @@
 		struct GROOT_HEADER_PROTOCOL protocol;
 		rimeaddr_t to;
 		uint8_t is_cluster_head;
-		//rimeaddr_t esender;
 		uint8_t type;
 		rimeaddr_t ereceiver;
 		uint16_t query_id;
@@ -200,10 +199,10 @@
 		rimeaddr_t ereceiver;
 		rimeaddr_t parent;
 		uint8_t parent_is_cluster;
-		rimeaddr_t parent_bkup;
 		uint8_t agg_passes;
 		uint8_t is_serviced;
 		unsigned long unsubscribed;
+		unsigned long last_published;
 		struct ctimer query_timer;
 		struct ctimer maintainer_t;
 		struct GROOT_QUERY query;
