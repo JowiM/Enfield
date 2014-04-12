@@ -23,6 +23,14 @@
  	#define GROOT_RM_UNSUBSCRIBE 5*CLOCK_SECOND
 #endif
 
+#ifndef GROOT_RETRIES_AGGREGATION
+ 	#define GROOT_RETRIES_AGGREGATION 3
+#endif
+
+ #ifndef GROOT_RETRIES_PARENT
+ 	#define GROOT_RETRIES_PARENT 3
+#endif
+
 #ifndef GROOT_QUERY_LIMIT 
  	#define GROOT_QUERY_LIMIT 10
 #endif
@@ -201,6 +209,7 @@
 		uint8_t parent_is_cluster;
 		uint8_t agg_passes;
 		uint8_t is_serviced;
+		unsigned long parent_last_seen;
 		unsigned long unsubscribed;
 		unsigned long last_published;
 		struct ctimer query_timer;

@@ -86,6 +86,11 @@ print_children(struct GROOT_SRT_CHILD *first_child){
 }
 
 /*------------------------------------------------- Other Methods ----------------------------------------------------------*/
+static int
+least_idle_time(struct GROOT_QUERY_ITEM *qry_itm, int retries, int leeway){
+	return clock_seconds()-(((qry_itm->query.sample_rate/CLOCK_SECOND) + leeway) * retries);
+}
+
 static void
 copy_qry(struct GROOT_QUERY *target, struct GROOT_QUERY *src){
 	target->sample_id = src->sample_id;
@@ -185,7 +190,7 @@ static struct GROOT_SRT_CHILD
 
 static void
 rm_child(struct GROOT_QUERY_ITEM *list, struct GROOT_SRT_CHILD *child){
-struct GROOT_SRT_CHILD *prev_child = NULL, *tmp_child = NULL;
+	struct GROOT_SRT_CHILD *prev_child = NULL, *tmp_child = NULL;
 	uint8_t isFound = 0;
 
 	tmp_child = list->children;
@@ -213,6 +218,28 @@ struct GROOT_SRT_CHILD *prev_child = NULL, *tmp_child = NULL;
 		printf("IS FOUND!! \n");
 		memb_free(&groot_children, child);
 		memset(child, ' ', sizeof(struct GROOT_QUERY_ITEM));
+	}
+}
+
+static void
+update_parent_last_seen(const rimeaddr_t *parent){
+	struct GROOT_QUERY_ITEM *qry_itm = NULL;
+	int least_time;
+
+	qry_itm = list_head(groot_qry_table);
+	while(qry_itm != NULL){
+		if(rimeaddr_cmp(&qry_itm->parent, parent)){
+			qry_itm->parent_last_seen = clock_seconds();
+			continue; 
+		}
+
+		least_time = least_idle_time(qry_itm, GROOT_RETRIES_PARENT, 2);
+		if(qry_itm->parent_last_seen <= least_time){
+			printf("PARENT IS DEAD!! \n");
+			rimeaddr_copy(&qry_itm->parent, &rimeaddr_null);
+		}
+
+		qry_itm = qry_itm->next;
 	}
 }
 
@@ -271,7 +298,6 @@ packet_qry_creator(struct GROOT_HEADER *hdr, struct GROOT_QUERY *qry, uint16_t q
 	
 	//Main Variables
 	rimeaddr_copy(&hdr->ereceiver, ereceiver);
-	//rimeaddr_copy(&hdr->ereceiver, ereceiver);
 	rimeaddr_copy(&hdr->received_from, from);
 	if(is_capable(data_required) == 0){
 		hdr->is_cluster_head = 0;
@@ -396,12 +422,16 @@ send_sample(struct GROOT_QUERY_ITEM *qry_itm, struct GROOT_SENSORS_DATA *sensors
 	struct GROOT_HEADER hdr;
 	struct GROOT_QUERY qry;
 
+	if(rimeaddr_cmp(&qry_itm->parent, &rimeaddr_null) > 0){
+		printf("NO PARENT!!");
+		return;
+	}
+
 	hdr.protocol.version = GROOT_VERSION;
 	hdr.protocol.magic[0] = 'G';
 	hdr.protocol.magic[1] = 'T';
 	rimeaddr_copy(&hdr.to, &qry_itm->parent);
 	rimeaddr_copy(&hdr.ereceiver, &qry_itm->ereceiver);
-	//rimeaddr_copy(&hdr., &rimeaddr_node_addr);
 	rimeaddr_copy(&hdr.received_from, &rimeaddr_null);
 
 	hdr.is_cluster_head = qry_itm->is_serviced;
@@ -432,7 +462,7 @@ can_send_aggregate(struct GROOT_QUERY_ITEM *qry_itm){
 
 		if(qry_itm->last_published != 0){
 			//Passed through 3 times without setting. Node is dead!
-		 	lst_time = clock_seconds()-(((qry_itm->query.sample_rate/CLOCK_SECOND) + 2) * 3);
+		 	lst_time = least_idle_time(qry_itm, GROOT_RETRIES_AGGREGATION, 2);
 		 	printf("LAST TIME: %d - last set - %d", lst_time, tmp_child->last_set);
 			if(lst_time > 0 && tmp_child->last_set <= lst_time){
 				printf("REMOVING CHILD!! \n");
@@ -697,7 +727,7 @@ rcv_unsubscribe(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 
 static int
 rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
-	struct GROOT_QUERY_ITEM *lst_itm = NULL;
+	struct GROOT_QUERY_ITEM *lst_itm = NULL, *nm_itm = NULL;
 	struct GROOT_SENSORS_DATA *sns_data = NULL;
 	struct GROOT_SRT_CHILD *child = NULL;
 	struct GROOT_QUERY *qry_bdy = NULL;
@@ -716,8 +746,10 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 
 	//Not for me!
 	if(rimeaddr_cmp(&hdr->to, &rimeaddr_node_addr) == 0){
+		update_parent_last_seen(from);
 		//Check if I have query. If not add!
-		if(find_query(hdr->query_id, &hdr->ereceiver) == NULL){
+		nm_itm = find_query(hdr->query_id, &hdr->ereceiver);
+		if(nm_itm == NULL){
 			//Get Query from buffer
 			qry_bdy = packetbuf_get_qry();
 			//Add the new qry to the table
@@ -732,7 +764,13 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 					ctimer_set(&lst_itm->maintainer_t, (rand()%(1*CLOCK_SECOND)), cluster_join_send, lst_itm);	
 				}
 			}
+		} else {
+			//If query has no parent update parent
+			if(rimeaddr_cmp(&nm_itm->parent, &rimeaddr_null) > 0){
+				rimeaddr_copy(&nm_itm->parent, from);
+			}
 		}
+
 		return 0;
 	}
 
@@ -745,6 +783,7 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	if(lst_itm->query.aggregator == GROOT_NO_AGGREGATION){
 		rimeaddr_copy(&hdr->to, &lst_itm->parent);
 		broadcast_send(&glocal.channels->bc);
+		return 1;
 	}
 
 	//Is aggretated store data locally until all data has arrived
@@ -755,9 +794,13 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	print_data(sns_data);
 
 	child = get_child(lst_itm->children, from);
+	//If child set to aggregate. If not Child send bcast
 	if(child != NULL){
 		memcpy(&child->data, sns_data, sizeof(struct GROOT_SENSORS_DATA));
 		child->last_set = clock_seconds();
+	} else {
+		rimeaddr_copy(&hdr->to, &lst_itm->parent);
+		broadcast_send(&glocal.channels->bc);
 	}
 
 	print_children(lst_itm->children);
