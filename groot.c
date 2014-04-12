@@ -200,7 +200,7 @@ rm_child(struct GROOT_QUERY_ITEM *list, struct GROOT_SRT_CHILD *child){
 			tmp_child = tmp_child->next;
 			continue;
 		}
-
+		isFound = 1;
 		//If root child update list
 		if(prev_child == NULL){
 			printf("ROOT!! \n");
@@ -208,16 +208,17 @@ rm_child(struct GROOT_QUERY_ITEM *list, struct GROOT_SRT_CHILD *child){
 		} else { // update previous
 			printf("OTHER \n");
 			prev_child->next = tmp_child->next;
+			printf("OTHER %d \n", prev_child->next);
 		}
-		isFound = 1;
+		
 		prev_child = tmp_child;
 		tmp_child = tmp_child->next;
 	}
 	
 	if(isFound == 1){
 		printf("IS FOUND!! \n");
+		memset(child, 0, sizeof(struct GROOT_SRT_CHILD));
 		memb_free(&groot_children, child);
-		memset(child, ' ', sizeof(struct GROOT_QUERY_ITEM));
 	}
 }
 
@@ -225,17 +226,24 @@ static void
 update_parent_last_seen(const rimeaddr_t *parent){
 	struct GROOT_QUERY_ITEM *qry_itm = NULL;
 	int least_time;
-
+printf("UPDATE PARENT LAST SEEN \n");
 	qry_itm = list_head(groot_qry_table);
 	while(qry_itm != NULL){
 		if(rimeaddr_cmp(&qry_itm->parent, parent)){
+			printf("UPDATE LAST SEEN! \n");
 			qry_itm->parent_last_seen = clock_seconds();
+			qry_itm = qry_itm->next;
 			continue; 
 		}
 
 		least_time = least_idle_time(qry_itm, GROOT_RETRIES_PARENT, 2);
-		if(qry_itm->parent_last_seen <= least_time){
+		printf("PARENT LEAST - %d - %d \n", qry_itm->parent_last_seen, least_time);
+		if(least_time > 0 && qry_itm->parent_last_seen <= least_time){
 			printf("PARENT IS DEAD!! \n");
+			if(!ctimer_expired(&qry_itm->query_timer)){
+				//Stop Sampe timer
+				ctimer_stop(&qry_itm->query_timer);
+			}
 			rimeaddr_copy(&qry_itm->parent, &rimeaddr_null);
 		}
 
@@ -254,8 +262,8 @@ cb_rm_query(void *i){
 	}
 
 	list_remove(groot_qry_table, lst_itm);
+	memset(lst_itm, 0, sizeof(struct GROOT_QUERY_ITEM));
 	memb_free(&groot_qrys, lst_itm);
-	memset(lst_itm, ' ', sizeof(struct GROOT_QUERY_ITEM));
 }
 
 static uint8_t
@@ -477,8 +485,8 @@ can_send_aggregate(struct GROOT_QUERY_ITEM *qry_itm){
 
 		printf("LAST SET: %d - LAST PUBLISHED %d \n", tmp_child->last_set, qry_itm->last_published);
 		if((tmp_child->last_set <= qry_itm->last_published && qry_itm->agg_passes < 3) && 
-			ctimer_expired(&qry_itm->maintainer_t)){
-
+			ctimer_expired(&qry_itm->maintainer_t))
+		{
 			//Increment Passes
 			qry_itm->agg_passes += 1;
 			printf("AGG PASSES: %d \n", qry_itm->agg_passes);
@@ -766,8 +774,15 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 			}
 		} else {
 			//If query has no parent update parent
-			if(rimeaddr_cmp(&nm_itm->parent, &rimeaddr_null) > 0){
+			if(hdr->is_cluster_head == 1 && rimeaddr_cmp(&nm_itm->parent, &rimeaddr_null) > 0){
+				printf("NEW PARENT \n");
 				rimeaddr_copy(&nm_itm->parent, from);
+				nm_itm->parent_last_seen = clock_seconds();
+				if(nm_itm->is_serviced > 0){
+					ctimer_set(&nm_itm->maintainer_t, rand()%(1*CLOCK_SECOND), cluster_join_send, nm_itm);
+					ctimer_set(&nm_itm->query_timer, nm_itm->query.sample_rate, cb_sampler, nm_itm);
+				}
+				
 			}
 		}
 
@@ -852,6 +867,8 @@ rcv_cluster_join(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 		(child_length(lst_itm->children) >= GROOT_CHILD_LIMIT)){
 		return 0;
 	}
+
+	//@todo check if child is in the children list already
 
 	//Get Child memory
 	child = memb_alloc(&groot_children);
