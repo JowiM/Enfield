@@ -7,7 +7,7 @@
 	#include "dev/button-sensor.h"
 #endif
 
-struct GROOT_SENSORS sensor_support = {.co2 = 1, .no = 1, .temp = 1, .humidity = 1};
+static struct GROOT_SENSORS sensor_support = {1, 1, 1, 1};
 
 //Initialize Process information
 /*---------------------------------------------*/

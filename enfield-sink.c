@@ -14,7 +14,7 @@
  *          future it can easily be added
  * 
  */
-struct GROOT_SENSORS sensor_support = {.co2 = 0, .no = 0, .temp = 0, .humidity = 0};
+static struct GROOT_SENSORS sensor_support = {0, 0, 0, 0};
 static uint16_t query_id = 0;
 static uint8_t numb_clicks = 0;
 //Initialize Process information
@@ -29,7 +29,7 @@ PROCESS_THREAD(enfield_sink, ev, data){
 	
 	static uint16_t sample_rate = 13*CLOCK_SECOND;
 	static uint8_t aggregation = GROOT_MAX;
-	static struct GROOT_SENSORS data_required = {.co2 = 1, .no = 0, .temp = 1, .humidity = 0};
+	static struct GROOT_SENSORS data_required = {1, 0, 1, 0};
 	static int is_subscribed;
 
 	printf("SINK!! \n");

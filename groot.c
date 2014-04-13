@@ -238,7 +238,7 @@ printf("UPDATE PARENT LAST SEEN \n");
 
 		least_time = least_idle_time(qry_itm, GROOT_RETRIES_PARENT, 2);
 		printf("PARENT LEAST - %d - %d \n", qry_itm->parent_last_seen, least_time);
-		if(least_time > 0 && qry_itm->parent_last_seen <= least_time){
+		if(least_time > 0 && qry_itm->parent_last_seen > 0 && qry_itm->parent_last_seen <= least_time){
 			printf("PARENT IS DEAD!! \n");
 			if(!ctimer_expired(&qry_itm->query_timer)){
 				//Stop Sampe timer
@@ -763,7 +763,11 @@ rcv_publish(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 			//Add the new qry to the table
 			lst_itm = qry_to_list(hdr, qry_bdy, from);
 			if(lst_itm != NULL){
+				printf("LST ITEM ADDED: is-serviced: %d  parent: ", lst_itm->is_serviced);
+				PRINT2ADDR(&lst_itm->parent);
+				printf("/n");
 				if(lst_itm->is_serviced == 1){
+					printf("STARTED TIMER!! for servicing \n");
 					//Timer for sampling
 					ctimer_set(&lst_itm->query_timer, qry_bdy->sample_rate+(rand()%(1*CLOCK_SECOND)), cb_sampler, lst_itm);
 				}
@@ -873,7 +877,7 @@ rcv_cluster_join(struct GROOT_HEADER *hdr, const rimeaddr_t *from){
 	//Get Child memory
 	child = memb_alloc(&groot_children);
 	rimeaddr_copy(&child->address, from);
-	child->last_set = 0;
+	child->last_set = clock_seconds();
 	child->next = NULL;
 	//Add Child
 	if(lst_itm->children == NULL){
@@ -976,6 +980,8 @@ groot_rcv(const rimeaddr_t *from){
 	}
 
 	PRINT2ADDR(&rimeaddr_node_addr);
+	printf("FROM - ");
+	PRINT2ADDR(from);
 	printf("- { RECEIVED - %02x }\n", hdr->type);
 
 	if(glocal.is_sink == 0){
