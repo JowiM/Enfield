@@ -29,11 +29,30 @@ sink_bootstrap(struct GROOT_SENSORS *supported_sensors);
 int
 sink_subscribe(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation);
 
+/**
+ * @brief When calling remove the query from the network
+ * @details When called sends broadcast to remove query from the network
+ * 
+ * @param query_id query affected
+ */
 int
 sink_unsubscribe(uint16_t query_id);
 
+/**
+ * @brief Used to update any queries already running om the network
+ * @details Used to update any queries already running on the network
+ * 
+ * @param query_id [description]
+ * @param sample_rate [description]
+ * @param GROOT_SENSORS [description]
+ * @param aggregation [description]
+ */
 int
 sink_send(uint16_t query_id, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregation);
 
+/**
+ * @brief Remove sink from adhoc network
+ * @details Remove sink from adhoc network
+ */
 void
 sink_destroy();

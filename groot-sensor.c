@@ -7,7 +7,6 @@ struct GROOT_CHANNELS sensor_chan;
 /*------------------------------ Callbacks ---------------------------------*/
 static void
 recv_routing(struct broadcast_conn *c, const rimeaddr_t *from){
-	printf("Recevied Query!!");
 	//Handle new query
 	int is_success = groot_rcv(from);
 	if(!is_success){
@@ -52,8 +51,6 @@ void sensor_bootstrap(struct GROOT_SENSORS *support){
 	
 	//Initialize protocol library
 	groot_prot_init(support, &sensor_chan, 0);
-
-	//@todo check if any neighbours has any queries good for me!!
 }
 
 int

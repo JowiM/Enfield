@@ -42,13 +42,13 @@ PROCESS_THREAD(enfield_sink, ev, data){
 		PROCESS_WAIT_EVENT_UNTIL(ev == sensors_event &&
 									data == &button_sensor);
 		numb_clicks += 1;
-		if(numb_clicks == 6){
+		if(numb_clicks == 2){
 			printf("UNSUBSCRIBE CLICK \n");
-			is_subscribed = sink_unsubscribe(4);
-		} else if(numb_clicks == 7){
+			is_subscribed = sink_unsubscribe(1);
+		} else if(numb_clicks == 4){
 			printf("UPDATE QUERY CLICK \n");
 			data_required.no = 1;
-			is_subscribed = sink_send(1, 30*CLOCK_SECOND, &data_required, GROOT_MAX);
+			is_subscribed = sink_send(2, 30*CLOCK_SECOND, &data_required, GROOT_AVG);
 		} else {
 			printf("PRESSED BUTTON!! \n");
 			//Increment Query ID

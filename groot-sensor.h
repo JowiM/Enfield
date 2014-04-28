@@ -6,8 +6,18 @@
  */
 #include "groot.h"
 
+/**
+ * @brief Start Sensor mote
+ * @details Start Sensor mote
+ * 
+ * @param GROOT_SENSORS Sensors supported
+ */
 void
 sensor_bootstrap(struct GROOT_SENSORS *support);
 
+/**
+ * @brief Kill sensor mote
+ * @details Kill sensor mote
+ */
 int
 sensor_destroy();

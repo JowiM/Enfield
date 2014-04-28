@@ -97,6 +97,9 @@
  	#define GROOT_PUBLISH_TYPE 0xC8
 #endif
 
+/**
+ * Sensor Definitions
+ */
 #ifndef SENSOR_CO2
  	#define SENSOR_CO2 0x01
 #endif
@@ -145,6 +148,9 @@
 /**
  * PACKET INFO
  */
+/**
+ * @brief the structure used to signal what sensors are available
+ */
 #ifndef GROOT_SENSORS
 	struct GROOT_SENSORS{
 		uint8_t co2;
@@ -154,6 +160,9 @@
 	};
 #endif
 
+/**
+ * @brief the strcuture used to pass the data
+ */
 #ifndef GROOT_SENSORS_DATA
 	struct GROOT_SENSORS_DATA{
 		float co2;
@@ -170,6 +179,9 @@
 	};
 #endif
 
+/**
+ * @brief the header structure
+ */
 #ifndef GROOT_HEADER
 	struct GROOT_HEADER{
 		struct GROOT_HEADER_PROTOCOL protocol;
@@ -182,6 +194,9 @@
 	};
 #endif
 
+/**
+ * @brief The actual query structure
+ */
 #ifndef GROOT_QUERY
 	struct GROOT_QUERY{
 		uint16_t sample_id;
@@ -191,6 +206,9 @@
 	};
 #endif
 
+/**
+ * @brief The list that will hold the children associated with a query
+ */
 #ifndef GROOT_SRT_CHILD
 	struct GROOT_SRT_CHILD{
 		rimeaddr_t address;
@@ -200,18 +218,24 @@
 	};
 #endif
 
+/**
+ * @brief Contains all the queries that is running on the network
+ * @details  Contails all the queries that where sent by all sinks. Its also
+ *           holds information reguarding routing the same query/
+ */
 #ifndef GROOT_QUERY_ITEM
 	struct GROOT_QUERY_ITEM{
 		struct GROOT_QUERY_ITEM *next;
 		uint16_t query_id;
 		rimeaddr_t ereceiver;
 		rimeaddr_t parent;
+		rimeaddr_t rcv_alter;
 		uint8_t parent_is_cluster;
 		uint8_t agg_passes;
 		uint8_t is_serviced;
-		unsigned long parent_last_seen;
-		unsigned long unsubscribed;
-		unsigned long last_published;
+		unsigned long parent_last_seen; //When was parent last publish
+		unsigned long unsubscribed; //What time unsubscribe received
+		unsigned long last_published; //Last time the query was published
 		struct ctimer query_timer;
 		struct ctimer maintainer_t;
 		struct GROOT_QUERY query;
@@ -219,6 +243,14 @@
 	};
 #endif
 
+/**
+ * @brief Local structur used to hold sensor and channels
+ * @details Local structure used to hold sensor and channels
+ * 
+ * @param GROOT_SENSORS Sensors supported by the mote
+ * @param GROOT_CHANNELS Channels needed for mote
+ * @param is_sink is this a sink or a sensor?
+ */
 #ifndef GROOT_LOCAL
  	struct GROOT_LOCAL{
  		struct GROOT_SENSORS sensors;
@@ -228,16 +260,43 @@
 #endif
 
 /**
- * Method Definitions
+ * @brief Initialise protocol
+ * @details Initialise Groot portocol
+ * 
+ * @param GROOT_SENSORS Sensors it supports
+ * @param GROOT_CHANNELS Channels
+ * @param is_sink is_sink or sensor?
  */
 void
 groot_prot_init(struct GROOT_SENSORS *sensors, struct GROOT_CHANNELS *channels, uint8_t is_sink);
 
+/**
+ * @brief Send the actual query to the sensors
+ * @details Pass the query to all sensors.
+ * 
+ * @param query_id The id of the query to send
+ * @param type What query will be sent. Subscribe, or update??
+ * @param sample_rate How often to sample the query
+ * @param GROOT_SENSORS What sensor data will be collected.
+ * @param aggregator What aggregation to use.
+ */
 int
 groot_qry_snd(uint16_t query_id, uint8_t type, uint16_t sample_rate, struct GROOT_SENSORS *data_required, uint8_t aggregator);
 
+/**
+ * @brief Handle the receive values.
+ * @details Handle the receive values.
+ * 
+ * @param from pass the address of whom the message arrived
+ */
 int
 groot_rcv(const rimeaddr_t *from);
 
+/**
+ * @brief Send unsubscribe query.
+ * @details Send unsubscribe query
+ * 
+ * @param query_id The query id needed for deletion
+ */
 int
 groot_unsubscribe_snd(uint16_t query_id);
